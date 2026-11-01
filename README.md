@@ -9,6 +9,7 @@ uv run dungeon-synth-gen --minutes 10          # 10 min of that stream -> out/du
 uv run dungeon-synth-gen --seed 42 --midi      # one 16-bar piece -> out/dungeon_42[_style].wav + .mid
 uv run dungeon-synth-gen --mode phrygian --root D --tempo 64
 uv run dungeon-synth-gen --seed 42 --style combat  # -> out/dungeon_42_combat.wav
+uv run dungeon-synth-gen --minutes 2 --switch-at 20,45  # combat on at 0:20, off at 0:45
 uv run pytest
 ```
 
@@ -22,6 +23,17 @@ uv run pytest
 - With no `--style`, each region picks normal or ambient; combat is never chosen at random.
 - `--style`, `--mode`, `--root` and `--tempo` pin that parameter for the whole stream.
 - The same `--seed` always gives the same stream.
+
+## Switching to combat mid-stream
+
+During `--endless`, press `c` to toggle combat on and off. The switch is instant, because the other version is already rendered:
+
+- Every phrase is pregenerated twice: as written, and as its twin in the other gear (combat, or normal when the stream is pinned to combat).
+- A twin keeps the phrase's chords, key and lead line, and swaps in that style's groove, synths and double (or half) tempo.
+- Two renderers run side by side and both hear every phrase, so the idle version's reverb and drone are already sounding when you switch to it.
+- A switch jumps to the same musical point in the other version, with a 30 ms crossfade, within 0.1 s of the keypress.
+
+`--minutes` with `--switch-at 20,45,...` writes the same thing to a WAV, toggling at those seconds. From Python, pass a `stream.CombatSwitch` to `stream.play(seed, switch=...)` and call `.toggle()` (or set `.on`) from any thread, for example from a game loop.
 
 ## Styles
 
@@ -44,10 +56,10 @@ Without `--style`, a fixed piece's style is drawn from its seed: normal 2/3, amb
 | `melody.py` | Motifs realised over chords, sequenced, with cadences, one phrase at a time |
 | `parts.py` | Drone, bassline, arpeggio, percussion (GM drum notes), per style and section role |
 | `arrange.py` | Palettes (shared material per key region), phrase builder, the fixed 16-bar form |
-| `endless.py` | Endless form: key regions, style and key changes, motif evolution |
+| `endless.py` | Endless form: key regions, style and key changes, motif evolution, twin phrases for switching |
 | `synth.py` | PolyBLEP square/saw, 4-bit NES triangle, LFSR noise, ADSR, unison/drive/filter-sweep voices, sidechain pump, streaming renderer and mixer |
 | `effects.py` | Stateful lowpass, ping-pong echo, overlap-add convolution reverb |
-| `stream.py` | Live playback (renders ahead of the sound card) and long recordings |
+| `stream.py` | Live playback (renders ahead of the sound card), long recordings, and the instant combat switch |
 | `midi.py` | Standard MIDI File export |
 
 `--root` and `--tempo` transpose or retime the same seeded piece. `--mode` can also change its chords, since each mode allows different ones.

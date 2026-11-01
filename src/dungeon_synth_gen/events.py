@@ -37,6 +37,9 @@ class Phrase:
     tempo: float
     style: str
     events: tuple[NoteEvent, ...]
+    # The same phrase in the other gear (combat, or normal for a combat region):
+    # same chords and lead, its own groove and tempo, so playback can jump across.
+    twin: Phrase | None = None
 
     @property
     def beats(self) -> float:

@@ -6,6 +6,11 @@ region's) and a short form such as intro -> theme -> contrast -> development
 -> return. Keys only move to neighbours that still contain the old tonic,
 and each region's drone is timed to crossfade into the next one's, so there
 is never a seam.
+
+With ``twins=True`` every phrase also carries its twin in the other gear:
+combat, or normal while the region is combat. A twin shares the phrase's
+palette, chords and lead (its part RNGs are cloned, so the stream's own
+draws never change) and swaps in that style's groove and tempo.
 """
 
 from __future__ import annotations
@@ -13,9 +18,10 @@ from __future__ import annotations
 import itertools
 import random
 from collections.abc import Iterator
+from dataclasses import replace
 
 from dungeon_synth_gen import arrange, parts, theory
-from dungeon_synth_gen.events import BEATS_PER_BAR, Phrase, Section
+from dungeon_synth_gen.events import BEATS_PER_BAR, NoteEvent, Phrase, Section
 from dungeon_synth_gen.theory import Scale
 
 _TEMPO_STEPS = (-4, -2, 0, 0, 2, 4)  # BPM drift between regions, before the style's tempo scale
@@ -35,8 +41,27 @@ def _form(rng: random.Random, first: bool) -> list[str]:
     return plan
 
 
+def _ordered(events: list[NoteEvent]) -> tuple[NoteEvent, ...]:
+    return tuple(sorted(events, key=arrange.event_order))
+
+
+def twin_style(style: str) -> str:
+    """The gear a style's twin plays in."""
+    return "normal" if style == "combat" else "combat"
+
+
+def _clone(rngs: arrange.PartRngs) -> arrange.PartRngs:
+    copies = []
+    for rng in rngs:
+        copy = random.Random()
+        copy.setstate(rng.getstate())
+        copies.append(copy)
+    return arrange.PartRngs(*copies)
+
+
 def endless(
-    seed: int, *, style: str | None = None, mode: str | None = None, root: int | None = None, tempo: float | None = None
+    seed: int, *, style: str | None = None, mode: str | None = None, root: int | None = None, tempo: float | None = None,
+    twins: bool = False,
 ) -> Iterator[Phrase]:
     """Phrases forever. Any of ``style``, ``mode``, ``root``, ``tempo`` pins that parameter for the whole stream.
 
@@ -46,6 +71,7 @@ def endless(
     scale, bpm = arrange.initial_params(seed, current_style, mode, root, tempo)
     form = arrange.stream(seed, "form")
     palette_rng = arrange.stream(seed, "palette")
+    twin_rng = arrange.stream(seed, "twin")
     rngs = arrange.PartRngs.for_seed(seed)
     pal = arrange.new_palette(palette_rng, scale, current_style)
     index = bar = 0
@@ -54,14 +80,23 @@ def endless(
         plan = _form(form, first=region == 0)
         chords = [pal.chords(name, palette_rng) for name in plan]
         region_beats = sum(len(c) for c in chords) * BEATS_PER_BAR
+        if twins:
+            gear = twin_style(current_style)
+            twin_pal = replace(pal, groove=parts.draw_groove(twin_rng, gear))
+            twin_bpm = bpm / arrange.TEMPO_SCALE[current_style] * arrange.TEMPO_SCALE[gear]
         for i, name in enumerate(plan):
             is_last = i == len(plan) - 1
-            events = arrange.build_phrase(rngs, pal, name, chords[i], next_chord=0 if is_last else chords[i + 1][0])
-            if i == 0:
-                # Held for the whole region; it releases exactly as the next region's drone fades in.
-                events += parts.drone(pal.scale, pal.drone_tonic, region_beats)
+            next_chord = 0 if is_last else chords[i + 1][0]
+            twin_rngs = _clone(rngs) if twins else None
+            events = arrange.build_phrase(rngs, pal, name, chords[i], next_chord)
+            # Held for the whole region; it releases exactly as the next region's drone fades in.
+            drone = parts.drone(pal.scale, pal.drone_tonic, region_beats) if i == 0 else []
             section = Section(name, bar, chords[i])
-            yield Phrase(index, region, section, pal.scale, bpm, current_style, tuple(sorted(events, key=arrange.event_order)))
+            twin = None
+            if twins:
+                twin_events = arrange.build_phrase(twin_rngs, twin_pal, name, chords[i], next_chord) + drone
+                twin = Phrase(index, region, section, pal.scale, twin_bpm, gear, _ordered(twin_events))
+            yield Phrase(index, region, section, pal.scale, bpm, current_style, _ordered(events + drone), twin)
             index += 1
             bar += len(chords[i])
 

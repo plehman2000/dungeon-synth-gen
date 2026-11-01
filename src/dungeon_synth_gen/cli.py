@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import atexit
 import random
+import sys
+import threading
 import time
 from pathlib import Path
 
@@ -30,7 +33,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dry", action="store_true", help="skip reverb and echo")
     parser.add_argument("--endless", action="store_true", help="play one continuous, ever-evolving stream until Ctrl+C")
     parser.add_argument("--minutes", type=float, help="write this many minutes of the continuous stream to a WAV")
+    parser.add_argument(
+        "--switch-at", type=_seconds, metavar="S,S,...",
+        help="with --minutes: toggle combat at these times in seconds, e.g. 20,45 (--endless toggles on the c key)",
+    )
     args = parser.parse_args(argv)
+    if args.switch_at and not args.minutes:
+        parser.error("--switch-at needs --minutes")
 
     seed = args.seed if args.seed is not None else random.randrange(1_000_000)
     overrides = {"style": args.style, "mode": args.mode, "root": args.root, "tempo": args.tempo}
@@ -39,7 +48,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.minutes:
         suffix = f"_{args.style}" if args.style else ""
         out = args.out or Path("out") / f"dungeon_endless_{seed}{suffix}.wav"
-        return _record_endless(out, seed, args.minutes, use_effects=not args.dry, **overrides)
+        return _record_endless(out, seed, args.minutes, use_effects=not args.dry, switches=args.switch_at or (), **overrides)
 
     overrides["style"] = args.style or seeded_style(seed)
     suffix = "" if overrides["style"] == "normal" else f"_{overrides['style']}"
@@ -63,12 +72,48 @@ def _print_phrase(phrase: Phrase, seconds: float) -> None:
     print(f"{minutes:02d}:{secs:02d}  {phrase.describe()}", flush=True)
 
 
-def _play_endless(seed: int, **options) -> int:
-    from dungeon_synth_gen.stream import play
+def _seconds(text: str) -> list[float]:
+    return [float(part) for part in text.split(",")]
 
-    print(f"seed {seed}  |  {options['style'] or 'mixed styles'}  |  one continuous stream, Ctrl+C to stop\n")
+
+def _listen_for_toggle(switch) -> bool:
+    """Flip ``switch`` on every c keypress, from a daemon thread. False when there is no console to read."""
+    if not sys.stdin.isatty():
+        return False
+    if sys.platform == "win32":
+        import msvcrt
+
+        read_key = msvcrt.getwch
+    else:
+        import termios
+        import tty
+
+        fd = sys.stdin.fileno()
+        atexit.register(termios.tcsetattr, fd, termios.TCSADRAIN, termios.tcgetattr(fd))
+        tty.setcbreak(fd)  # single keypresses; Ctrl+C still interrupts
+
+        def read_key() -> str:
+            return sys.stdin.read(1)
+
+    def listen() -> None:
+        while True:
+            if read_key().lower() == "c":
+                switch.toggle()
+
+    threading.Thread(target=listen, daemon=True).start()
+    return True
+
+
+def _play_endless(seed: int, **options) -> int:
+    from dungeon_synth_gen.stream import CombatSwitch, play
+
+    switch = CombatSwitch(on=options["style"] == "combat")
+    if not _listen_for_toggle(switch):
+        switch = None  # no keyboard to flip it, so skip rendering the twin
+    hint = "press c to toggle combat, Ctrl+C to stop" if switch else "Ctrl+C to stop"
+    print(f"seed {seed}  |  {options['style'] or 'mixed styles'}  |  one continuous stream, {hint}\n")
     try:
-        play(seed, on_phrase=_print_phrase, **options)
+        play(seed, on_phrase=_print_phrase, switch=switch, **options)
     except KeyboardInterrupt:
         print("stopped")
     return 0

@@ -2,6 +2,7 @@ import itertools
 import sys
 import types
 import wave
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -135,3 +136,97 @@ def test_play_streams_phrases_until_interrupted(monkeypatch):
         stream.play(5, on_phrase=lambda p, t: announced.append((p.index, t)))
     assert announced == [(0, 0.0)]
     assert written == [int(stream._BLOCK * stream.SAMPLE_RATE)] * 3
+
+
+# Switching between normal and combat mid-stream
+
+
+@pytest.mark.parametrize("style", [None, "normal", "combat"])
+def test_twins_leave_the_stream_unchanged_and_share_its_lead(style):
+    paired = take(11, 12, style=style, twins=True)
+    assert [replace(p, twin=None) for p in paired] == take(11, 12, style=style)
+    for p in paired:
+        t = p.twin
+        assert t.style == ("normal" if p.style == "combat" else "combat")
+        assert (t.section, t.scale, t.beats) == (p.section, p.scale, p.beats)
+        assert t.tempo == p.tempo * (0.5 if p.style == "combat" else 2)
+        assert [e for e in t.events if e.track == "lead"] == [e for e in p.events if e.track == "lead"]
+        assert any(e.track == "drone" for e in t.events) == any(e.track == "drone" for e in p.events)
+
+
+def fake_twinned(n_phrases=3, length=800):
+    """Real phrases; their own version plays a 100 Hz sine, the combat twin (half as long) a 50 Hz cosine."""
+    for p in take(8, n_phrases, style="normal", twins=True):
+        t = np.arange(length) / RATE
+        own = np.repeat(np.sin(2 * np.pi * 100 * t)[:, None], 2, axis=1)
+        tc = np.arange(length // 2) / RATE
+        twin = np.repeat(0.5 * np.cos(2 * np.pi * 50 * tc)[:, None], 2, axis=1)
+        yield p, own, twin
+
+
+def test_cursor_switch_keeps_the_beat_and_crossfades_without_a_click():
+    switch = stream.CombatSwitch()
+    cursor = stream.Cursor(fake_twinned(), switch, RATE)
+    before = cursor.read(300)  # 300 of 800 samples: 37.5% into the phrase
+    switch.toggle()
+    after = cursor.read(500)
+    assert cursor.phrase.style == "combat"
+    fade = int(stream._CROSSFADE * RATE)
+    # Lands 37.5% into the 400-sample twin, then plays it untouched once the fade is done.
+    twin = next(fake_twinned())[2]
+    assert np.allclose(after[fade:100], twin[150 + fade : 250])
+    joined = np.concatenate([before, after])[:, 0]
+    assert np.abs(np.diff(joined[290:300 + fade + 10])).max() < 0.1  # a hard cut here would jump by ~0.9
+
+
+def test_cursor_crosses_phrases_in_whichever_version_plays():
+    switch = stream.CombatSwitch(on=True)
+    cursor = stream.Cursor(fake_twinned(), switch, RATE)
+    first = cursor.phrase
+    assert len(cursor.read(400)) == 400  # exactly one twin phrase
+    assert cursor.phrase.index == first.index + 1 and cursor.remaining() == 400
+
+
+def test_record_switches_at_the_given_times(tmp_path):
+    shown = []
+    out = tmp_path / "switching.wav"
+    seconds = stream.record(
+        out, 8, minutes=0.4, sample_rate=RATE, style="normal", switches=[5, 12],
+        on_phrase=lambda p, t: shown.append((round(t, 3), p.style)),
+    )
+    assert (5.0, "combat") in shown and (12.0, "normal") in shown
+    assert [s for _, s in shown[: shown.index((5.0, "combat"))]] == ["normal"] * shown.index((5.0, "combat"))
+    with wave.open(str(out)) as f:
+        assert f.getnframes() == round(seconds * RATE)
+    assert seconds >= 24
+
+
+def test_play_follows_the_switch(monkeypatch):
+    written = []
+    switch = stream.CombatSwitch()
+
+    class FakeStream:
+        def __init__(self, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def write(self, block):
+            written.append(block.copy())
+            if len(written) == 1:
+                switch.toggle()
+            if len(written) == 3:
+                raise KeyboardInterrupt
+
+    monkeypatch.setitem(sys.modules, "sounddevice", types.SimpleNamespace(OutputStream=FakeStream))
+    monkeypatch.setattr(stream, "twinned", lambda seed, **kw: fake_twinned(length=100_000))
+    with pytest.raises(KeyboardInterrupt):
+        stream.play(5, switch=switch)
+    calm, combat = next(fake_twinned(length=100_000))[1:]
+    block = int(stream._BLOCK * stream.SAMPLE_RATE)
+    assert np.allclose(written[0], calm[:block])
+    assert np.allclose(written[2], combat[block // 2 + block : block // 2 + 2 * block])
