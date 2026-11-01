@@ -122,6 +122,8 @@ DRUM_PATTERNS: dict[str, tuple[tuple[int, int, int], ...]] = {
         (0, KICK, 118), (4, KICK, 112), (4, SNARE, 105), (8, KICK, 116), (12, KICK, 112), (12, SNARE, 108),
         *((i, HAT, 75 if i % 4 == 2 else 35) for i in range(16)),
     ),
+    # The gravest moment of a fight: half time, every hit given room to land.
+    "anthem": ((0, KICK, 124), (6, KICK, 88), (8, SNARE, 126), (10, KICK, 92), (14, LOW_TOM, 96)),
 }
 # Replace the second half of a section's last bar.
 _FILLS = {
@@ -212,11 +214,10 @@ def level(intensity: float) -> float:
     return round(min(1.0, max(0.0, intensity)) * 4) / 4
 
 
-# How each bass pattern thickens in a harder fight, and thins in an easier one.
-_DENSER = {
-    "drive": "sixteenths", "octaves": "bounce", "gallop": "pedalgallop", "offbeat": "offsixteenths",
-    "sludge": "stomp", "halves": "drive", "stomp": "riff",
-}
+# When it matters the bass follows the chord roots: a tonic pedal grinding under
+# the flat second is tension, and a grave moment wants weight.
+_FOLLOW = {"pedal": "sixteenths", "pedalgallop": "gallop"}
+# How each bass pattern thins in an easier fight.
 _SPARSER = {
     "sixteenths": "drive", "bounce": "octaves", "pedal": "drive", "riff": "octaves", "pedalgallop": "gallop",
     "offsixteenths": "offbeat", "stomp": "sludge", "gallop": "drive",
@@ -224,12 +225,17 @@ _SPARSER = {
 
 
 def intensify(groove: Groove, intensity: float) -> Groove:
-    """The groove for one phrase of a fight this hard: denser bass and faster arps from 0.75, sparser at 0.25 and below."""
+    """The groove for one phrase of a fight this hard.
+
+    Harder means heavier, not busier: from 0.75 the arps slow to eighths and
+    ring on, and the drums and pads (``percussion``, ``pad``) take the weight.
+    At 0.25 and below the bass and arps thin out.
+    """
     x = level(intensity)
     bass, (step, ring) = groove.bass, groove.arp
     if x >= 0.75:
-        bass = {role: _DENSER.get(p, p) for role, p in bass.items()}
-        step, ring = min(step, 0.25), min(ring, 0.22)
+        bass = {role: _FOLLOW.get(p, p) for role, p in bass.items()}
+        step, ring = max(step, 0.5), max(ring, 0.9)
     elif x <= 0.25:
         bass = {role: _SPARSER.get(p, p) for role, p in bass.items()}
         step, ring = max(step, 0.5), max(ring, 0.45)
@@ -249,6 +255,21 @@ def draw_groove(rng: random.Random, style: str) -> Groove:
     bass = {role: fixed.get(role, main) for role in ("intro", "theme", "contrast", "return")}
     drums = {role: p if isinstance(p, str) else rng.choice(p) for role, p in _DRUM_PLANS[style][0].items()}
     return Groove(style, bass, drums, arps, style, 1.0, _ARP_TIMING[style])
+
+
+def pad(scale: Scale, tonic: int, chords: tuple[int, ...]) -> list[NoteEvent]:
+    """Power chords (root, fifth, octave) held under each run of the same chord, on the drone's slow-swelling voice."""
+    events = []
+    bar = 0
+    while bar < len(chords):
+        run = 1
+        while bar + run < len(chords) and chords[bar + run] == chords[bar]:
+            run += 1
+        root = fold(chords[bar])
+        for degree in (root, root + 4, root + 7):
+            events.append(NoteEvent("drone", bar * BEATS_PER_BAR, run * BEATS_PER_BAR, scale.pitch(degree, tonic), 64))
+        bar += run
+    return events
 
 
 def drone(scale: Scale, tonic: int, beats: float) -> list[NoteEvent]:
@@ -301,16 +322,12 @@ def arpeggio(scale: Scale, tonic: int, chords: tuple[int, ...], groove: Groove, 
 
 
 def _drums_at(pattern: tuple[tuple[int, int, int], ...], intensity: float) -> tuple[tuple[int, int, int], ...]:
-    """A bar pattern for a fight this hard: only the downbeats and snares when easy; sixteenth hats and double kicks when hard."""
+    """A bar pattern for a fight this hard: only the downbeats and snares when easy, the half-time anthem at the top."""
     if intensity <= 0.25:
         return tuple(p for p in pattern if p[0] % 4 == 0 or p[1] == SNARE)
-    if intensity < 0.75:
-        return pattern
-    taken = {(step, drum) for step, drum, _ in pattern}
-    kicks = (2, 10) if intensity < 1 else (2, 6, 10, 14)
-    extra = [(s, KICK, 82) for s in kicks if (s, KICK) not in taken]
-    extra += [(s, HAT, 62 if s % 2 else 40) for s in range(16) if (s, HAT) not in taken]
-    return pattern + tuple(extra)
+    if intensity >= 1:
+        return DRUM_PATTERNS["anthem"]
+    return pattern
 
 
 def percussion(groove: Groove, role: str, bars: int, ending: bool = False) -> list[NoteEvent]:
@@ -318,16 +335,18 @@ def percussion(groove: Groove, role: str, bars: int, ending: bool = False) -> li
         return []
     _, filled, crashed = _DRUM_PLANS[groove.style]
     base = _drums_at(DRUM_PATTERNS[groove.drums[role]], groove.intensity)
-    flat_out = groove.intensity >= 0.875  # a crash on every bar, a fill every other bar
+    grave = groove.intensity >= 0.75  # every bar opens on a crash
     events = []
     for bar in range(bars):
         pattern = base
         if ending and bar == bars - 1:
             pattern = _ENDING_HIT
-        elif (bar == 0 and role in crashed) or (flat_out and bar % 2 == 0):
-            pattern = pattern + ((0, CRASH, 75 + 25 * flat_out),)
-        elif role in filled and (bar == bars - 1 or (flat_out and bar % 2 == 1)):
+        elif role in filled and bar == bars - 1:
             pattern = tuple(p for p in pattern if p[0] < 8) + _FILLS[groove.style]
+            if grave:
+                pattern += ((0, CRASH, 95),)
+        elif (bar == 0 and role in crashed) or grave:
+            pattern = pattern + ((0, CRASH, 95 if grave else 75),)
         for step, drum, velocity in pattern:
             events.append(NoteEvent("perc", bar * BEATS_PER_BAR + step / 4, 0.25, drum, velocity))
     return events

@@ -204,7 +204,11 @@ _CALM_SOUNDS = ("normal", "ambient")
 
 @functools.cache
 def _sound(name: str, intensity: float) -> dict[str, Instrument]:
-    """A combat synth set for a fight this hard: 0.5 as written; harder means more drive, open filters, deeper pump."""
+    """A combat synth set for a fight this hard, 0.5 as written.
+
+    Easier is smaller: less drive, darker filters, a shallower pump. Harder is
+    bigger, not dirtier: a little less drive, wider unison, a bigger room.
+    """
     instruments = SOUNDS[name]
     k = intensity - 0.5
     if name in _CALM_SOUNDS or k == 0:
@@ -212,13 +216,21 @@ def _sound(name: str, intensity: float) -> dict[str, Instrument]:
 
     def push(inst: Instrument) -> Instrument:
         if inst.wave == "drums":
-            return replace(inst, gain=inst.gain * (1 + 0.3 * k))
+            return replace(inst, gain=inst.gain * (1 + 0.3 * k), reverb=min(1.0, inst.reverb + 0.3 * max(k, 0)))
+        if k < 0:
+            return replace(
+                inst,
+                drive=inst.drive * (1 + 0.8 * k),
+                note_lowpass=inst.note_lowpass and inst.note_lowpass * (1 + k),
+                duck=inst.duck * (1 + 0.6 * k),
+                detune_cents=inst.detune_cents * (1 + 0.6 * k),
+            )
         return replace(
             inst,
-            drive=inst.drive * (1 + 1.2 * k),
-            note_lowpass=inst.note_lowpass and inst.note_lowpass * (1 + k),
-            duck=min(1.0, inst.duck * (1 + 0.6 * k)),
-            detune_cents=inst.detune_cents * (1 + 0.6 * k),
+            drive=inst.drive * (1 - 0.6 * k),
+            note_lowpass=inst.note_lowpass and inst.note_lowpass * (1 + 0.6 * k),
+            detune_cents=inst.detune_cents * (1 + 0.4 * k),
+            reverb=min(1.0, inst.reverb + 0.4 * k),
         )
 
     return {track: push(inst) for track, inst in instruments.items()}
@@ -531,9 +543,9 @@ class Renderer:
 
     def master(self, mix: np.ndarray) -> np.ndarray:
         """Stateless soft limiter for streams: the same curve on every block, peaks stay under 1."""
-        # A harder fight is denser and more driven already; its reference rises with it, so it only gets a little louder.
+        # A fight that matters sits a little forward (about 1.5 dB at 1), an easy one a little back.
         drive = _DRIVE[self.style]
-        reference = _STREAM_REFERENCE[self.style] * (1 + 0.35 * (self.intensity - 0.5))
+        reference = _STREAM_REFERENCE[self.style] * (1 - 0.3 * (self.intensity - 0.5))
         return np.tanh(drive * mix / reference) * (0.89 / np.tanh(drive))
 
 

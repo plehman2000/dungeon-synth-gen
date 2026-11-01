@@ -32,7 +32,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--tempo", type=float, help="override the seeded tempo (BPM)")
     parser.add_argument(
         "--intensity", type=float, default=0.5, metavar="0-1",
-        help="how hard the fight is, for combat: 0 sparse and sombre, 1 dense, phrygian and doubled (default 0.5)",
+        help="how much the fight matters, for combat: 0 sparse and sombre, 1 grave and huge (default 0.5)",
     )
     parser.add_argument("--dry", action="store_true", help="skip reverb and echo")
     parser.add_argument("--endless", action="store_true", help="play one continuous, ever-evolving stream until Ctrl+C")

@@ -68,8 +68,9 @@ def endless(
     The stream opens in the same style, key and tempo as ``compose(seed)`` with that seed's style.
 
     ``intensity`` (0-1, or a function read before every phrase, so a game can
-    raise it as a fight gets harder) shapes combat phrases only: grimmer modes,
-    denser drums and bass, a doubled lead, more drive and a touch more tempo.
+    raise it as a fight gets harder) shapes combat phrases only: sparse and
+    sombre when easy; when it matters, harmonic minor, half-time drums and
+    crashes, power-chord pads and a lead doubled an octave down.
     """
     read = intensity if callable(intensity) else (lambda: intensity)
     current_style = style or arrange.seeded_style(seed)
@@ -95,19 +96,21 @@ def endless(
             next_chord = 0 if is_last else chords[i + 1][0]
             twin_rngs = _clone(rngs) if twins else None
             x = read()
-            own, lift = arrange.in_combat(pal, current_style, mode, x)
-            bpm = region_bpm if tempo else region_bpm * lift
-            events = arrange.build_phrase(rngs, own, name, chords[i], next_chord)
+            own = arrange.in_combat(pal, current_style, mode, x, tuple(chords))
+            bpm = region_bpm
+            own_chords, (own_next,) = arrange.playable(own, chords[i]), arrange.playable(own, (next_chord,))
+            events = arrange.build_phrase(rngs, own, name, own_chords, own_next)
             # Held for the whole region; it releases exactly as the next region's drone fades in.
             drone = parts.drone(pal.scale, pal.drone_tonic, region_beats) if i == 0 else []
-            section = Section(name, bar, chords[i])
+            section = Section(name, bar, own_chords)
             twin = None
             if twins:
-                twin_pal, twin_lift = arrange.in_combat(twin_base, gear, mode, x)
-                twin_bpm = region_bpm / pal.groove.tempo * twin_pal.groove.tempo * (1 if tempo else twin_lift)
-                twin_events = arrange.build_phrase(twin_rngs, twin_pal, name, chords[i], next_chord) + drone
+                twin_pal = arrange.in_combat(twin_base, gear, mode, x, tuple(chords))
+                twin_bpm = region_bpm / pal.groove.tempo * twin_pal.groove.tempo
+                twin_chords, (twin_next,) = arrange.playable(twin_pal, chords[i]), arrange.playable(twin_pal, (next_chord,))
+                twin_events = arrange.build_phrase(twin_rngs, twin_pal, name, twin_chords, twin_next) + drone
                 twin = Phrase(
-                    index, region, section, twin_pal.scale, twin_bpm, gear, _ordered(twin_events),
+                    index, region, Section(name, bar, twin_chords), twin_pal.scale, twin_bpm, gear, _ordered(twin_events),
                     sound=twin_pal.groove.sound, intensity=twin_pal.groove.intensity,
                 )
             yield Phrase(

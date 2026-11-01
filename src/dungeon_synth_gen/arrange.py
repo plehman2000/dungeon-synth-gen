@@ -175,8 +175,10 @@ def build_phrase(
         )
         events += lead_notes
         if pal.groove.style == "combat" and pal.groove.intensity >= 0.75:
-            # A hard fight doubles the lead an octave up, so it screams over the riff.
-            events += [replace(e, pitch=e.pitch + 12, velocity=max(1, round(e.velocity * 0.7))) for e in lead_notes]
+            # A grave fight doubles the lead an octave down: weight under the line, not a scream over it.
+            events += [replace(e, pitch=e.pitch - 12, velocity=max(1, round(e.velocity * 0.6))) for e in lead_notes]
+    if pal.groove.style == "combat" and pal.groove.intensity >= 0.75:
+        events += parts.pad(pal.scale, pal.arp_tonic, chords)
     events += parts.arpeggio(pal.scale, pal.arp_tonic, chords, pal.groove, role, ending)
     events += parts.bassline(rngs.bass, pal.scale, pal.bass_tonic, chords, pal.groove, role, next_chord, ending)
     events += parts.percussion(pal.groove, role, len(chords), ending)
@@ -187,16 +189,36 @@ def event_order(e: NoteEvent) -> tuple[float, str, int]:
     return (e.start, e.track, e.pitch)
 
 
-def in_combat(pal: Palette, style: str, mode: str | None, intensity: float) -> tuple[Palette, float]:
-    """The palette as a fight this hard plays it, and its tempo lift (0.92-1.08). Calm styles pass through.
+def in_combat(
+    pal: Palette, style: str, mode: str | None, intensity: float, chords: tuple[tuple[int, ...], ...]
+) -> Palette:
+    """The palette as a fight this hard plays it; calm styles pass through.
 
-    Combat keeps the palette's degrees in a grimmer mode (unless the mode is pinned) and reshapes its groove.
+    Combat keeps the palette's degrees in a grimmer mode that every one of
+    ``chords`` (all the bars it will play in this key) can stand, unless the
+    mode is pinned, and reshapes its groove.
     """
     if style != "combat":
-        return pal, 1.0
+        return pal
     x = parts.level(intensity)
-    scale = pal.scale if mode is not None else theory.darken(pal.scale, x)
-    return replace(pal, scale=scale, groove=parts.intensify(pal.groove, x)), 1 + 0.16 * (x - 0.5)
+    used = [c for bars in chords for c in bars]
+    scale = pal.scale if mode is not None else theory.darken(pal.scale, x, used)
+    return replace(pal, scale=scale, groove=parts.intensify(pal.groove, x))
+
+
+def playable(pal: Palette, chords: tuple[int, ...]) -> tuple[int, ...]:
+    """The chords as combat plays them: any that its mode turned diminished or augmented
+    gives way to the nearest one that stayed major or minor. Calm palettes pass through."""
+    if pal.groove.style != "combat":
+        return chords
+
+    def fix(chord: int) -> int:
+        for alt in (chord, chord - 2, chord + 2, chord - 1, chord + 1, 0):
+            if pal.scale.triad_quality(alt % 7) in ("major", "minor"):
+                return alt % 7
+        return 0
+
+    return tuple(fix(c) for c in chords)
 
 
 def compose(
@@ -205,12 +227,14 @@ def compose(
 ) -> Composition:
     scale, drawn = initial_params(seed, style, mode, root, tempo)
     palette_rng = stream(seed, "palette")
-    pal, lift = in_combat(new_palette(palette_rng, scale, style), style, mode, intensity)
-    scale = pal.scale
-    tempo = tempo or drawn / TEMPO_SCALE[style] * pal.groove.tempo * lift
+    pal = new_palette(palette_rng, scale, style)
     rngs = PartRngs.for_seed(seed)
     names = ("intro", "theme", "contrast", "return")
     sections = [Section(name, 4 * i, pal.chords(name, palette_rng)) for i, name in enumerate(names)]
+    pal = in_combat(pal, style, mode, intensity, tuple(s.chords for s in sections))
+    sections = [replace(s, chords=playable(pal, s.chords)) for s in sections]
+    scale = pal.scale
+    tempo = tempo or drawn / TEMPO_SCALE[style] * pal.groove.tempo
 
     comp = Composition(
         seed=seed, tempo=tempo, scale=scale, sections=sections, style=style, sound=pal.groove.sound,

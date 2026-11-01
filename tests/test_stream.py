@@ -88,20 +88,27 @@ def test_combat_is_never_in_a_major_mode(style):
 
 def test_intensity_is_read_before_every_phrase():
     levels = iter([0.0, 1.0] * 20)
-    for p in take(3, 16, style="combat", intensity=lambda: next(levels)):
-        assert p.intensity in (0.0, 1.0)
-        assert (p.scale.mode == "phrygian") or p.intensity == 0.0
+    assert [p.intensity for p in take(3, 16, style="combat", intensity=lambda: next(levels))] == [0.0, 1.0] * 8
 
 
-def test_harder_fights_are_denser_grimmer_and_faster():
+def test_grave_fights_are_heavier_not_faster():
     easy = take(12, 12, style="combat", intensity=0.0)
-    hard = take(12, 12, style="combat", intensity=1.0)
-    count = lambda ps, track: sum(e.track == track for p in ps for e in p.events)
-    assert count(hard, "perc") > 1.5 * count(easy, "perc")
-    assert count(hard, "bass") > count(easy, "bass")
-    assert count(hard, "lead") > count(easy, "lead")  # doubled an octave up
-    assert all(p.scale.mode == "phrygian" for p in hard)
-    assert all(h.tempo > e.tempo for h, e in zip(hard, easy))
+    grave = take(12, 12, style="combat", intensity=1.0)
+    count = lambda ps, track, test=lambda e: True: sum(e.track == track and test(e) for p in ps for e in p.events)
+    assert count(grave, "lead") > count(easy, "lead")  # doubled an octave down
+    assert count(grave, "drone") > count(easy, "drone")  # power-chord pads
+    assert count(grave, "perc", lambda e: e.pitch == 49) > count(easy, "perc", lambda e: e.pitch == 49)  # crashes
+    assert [p.tempo for p in grave] == [p.tempo for p in easy]
+
+
+@pytest.mark.parametrize("intensity", [0.0, 0.5, 1.0])
+def test_combat_chords_never_turn_diminished(intensity):
+    for seed in range(8):
+        for p in take(seed, 30, twins=True, intensity=intensity):
+            combat = p if p.style == "combat" else p.twin
+            assert all(combat.scale.triad_quality(c) in ("major", "minor") for c in combat.section.chords), (
+                seed, combat.describe()
+            )
 
 
 def test_calm_phrases_ignore_intensity():
@@ -190,7 +197,9 @@ def test_twins_leave_the_stream_unchanged_and_share_its_lead(style):
     for p in paired:
         t = p.twin
         assert t.style == ("normal" if p.style == "combat" else "combat")
-        assert (t.section, t.scale.root, t.beats) == (p.section, p.scale.root, p.beats)
+        assert (t.section.name, t.section.start_bar, t.scale.root, t.beats) == (
+            p.section.name, p.section.start_bar, p.scale.root, p.beats
+        )
         assert t.tempo == pytest.approx(p.tempo / factor(p) * factor(t))
         rhythm = [(e.start, e.duration) for e in p.events if e.track == "lead"]
         assert [(e.start, e.duration) for e in t.events if e.track == "lead"] == rhythm

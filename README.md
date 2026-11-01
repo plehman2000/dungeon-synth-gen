@@ -9,7 +9,7 @@ uv run dungeon-synth-gen --minutes 10          # 10 min of that stream -> out/du
 uv run dungeon-synth-gen --seed 42 --midi      # one 16-bar piece -> out/dungeon_42[_style].wav + .mid
 uv run dungeon-synth-gen --mode phrygian --root D --tempo 64
 uv run dungeon-synth-gen --seed 42 --style combat  # -> out/dungeon_42_combat.wav
-uv run dungeon-synth-gen --seed 42 --style combat --intensity 1  # the same fight, desperate
+uv run dungeon-synth-gen --seed 42 --style combat --intensity 1  # the same fight, when it matters
 uv run dungeon-synth-gen --minutes 2 --switch-at 20,45  # combat on at 0:20, off at 0:45
 uv run pytest
 ```
@@ -66,12 +66,13 @@ Combat is never in a major key: it plays the calm music's chords and melody on t
 
 | | 0 | 0.5 (default) | 1 |
 | --- | --- | --- | --- |
-| Mode | sombre minor | phrygian / harmonic minor | phrygian |
-| Drums | downbeats and snares | the pattern as drawn | sixteenth hats, double kicks, a crash every other bar, fills between |
-| Bass and arps | thinned to eighths | as drawn | sixteenths |
-| Lead | | | doubled an octave up |
-| Synths | less drive and pump, darker filters | as written | more drive, wider unison, open filters, deeper pump |
-| Tempo | -8% | | +8% |
+| Mode | plain minor | phrygian / harmonic minor | harmonic minor where it fits |
+| Drums | downbeats and snares | the pattern as drawn | a crash on every bar from 0.75; half-time anthem at 1 |
+| Bass and arps | thinned to eighths | as drawn | bass as drawn; arps slow to ringing eighths |
+| Pads and lead | | | power-chord pads; lead doubled an octave down |
+| Synths | less drive and pump, darker filters | as written | a little cleaner, wider unison, a bigger room |
+
+High intensity is gravity, not clutter. At every level the mode is the first on its list in which none of the region's chords turns diminished or augmented, so nothing lands a tritone under the bass.
 
 ## Pipeline
 
