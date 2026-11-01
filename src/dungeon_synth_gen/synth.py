@@ -199,6 +199,31 @@ SOUNDS: dict[str, dict[str, Instrument]] = {
     "doom": DOOM_INSTRUMENTS,
     "chiptrash": CHIPTRASH_INSTRUMENTS,
 }
+_CALM_SOUNDS = ("normal", "ambient")
+
+
+@functools.cache
+def _sound(name: str, intensity: float) -> dict[str, Instrument]:
+    """A combat synth set for a fight this hard: 0.5 as written; harder means more drive, open filters, deeper pump."""
+    instruments = SOUNDS[name]
+    k = intensity - 0.5
+    if name in _CALM_SOUNDS or k == 0:
+        return instruments
+
+    def push(inst: Instrument) -> Instrument:
+        if inst.wave == "drums":
+            return replace(inst, gain=inst.gain * (1 + 0.3 * k))
+        return replace(
+            inst,
+            drive=inst.drive * (1 + 1.2 * k),
+            note_lowpass=inst.note_lowpass and inst.note_lowpass * (1 + k),
+            duck=min(1.0, inst.duck * (1 + 0.6 * k)),
+            detune_cents=inst.detune_cents * (1 + 0.6 * k),
+        )
+
+    return {track: push(inst) for track, inst in instruments.items()}
+
+
 # Master saturation: gentle rounds off drum peaks, combat squashes harder.
 _DRIVE = {"normal": 1.6, "ambient": 1.6, "combat": 2.4, "darksynth": 2.4, "brut": 3.0, "industrial": 2.8, "doom": 2.6, "chiptrash": 2.2}
 # Typical raw-mix peak per sound. A stream can't normalise to a peak it hasn't
@@ -429,10 +454,14 @@ class Renderer:
             self._echo_filter = effects.Lowpass(ECHO_LOWPASS, sample_rate)
             self._reverb = effects.Reverb(effects.impulse_response(sample_rate, seed))
 
-    def set_style(self, style: str) -> None:
-        """Instruments and mastering for whatever is scheduled from now on: a style, or any name in ``SOUNDS``."""
+    def set_style(self, style: str, intensity: float = 0.5) -> None:
+        """Instruments and mastering for whatever is scheduled from now on: a style, or any name in ``SOUNDS``.
+
+        ``intensity`` (0-1) pushes a combat set harder or eases it off; calm sets ignore it.
+        """
         self.style = style
-        self.instruments = SOUNDS[style]
+        self.intensity = 0.5 if style in _CALM_SOUNDS else intensity
+        self.instruments = _sound(style, self.intensity)
 
     def set_tempo(self, bpm: float) -> None:
         self.seconds_per_beat = 60.0 / bpm
@@ -502,13 +531,16 @@ class Renderer:
 
     def master(self, mix: np.ndarray) -> np.ndarray:
         """Stateless soft limiter for streams: the same curve on every block, peaks stay under 1."""
+        # A harder fight is denser and more driven already; its reference rises with it, so it only gets a little louder.
         drive = _DRIVE[self.style]
-        return np.tanh(drive * mix / _STREAM_REFERENCE[self.style]) * (0.89 / np.tanh(drive))
+        reference = _STREAM_REFERENCE[self.style] * (1 + 0.35 * (self.intensity - 0.5))
+        return np.tanh(drive * mix / reference) * (0.89 / np.tanh(drive))
 
 
 def render(comp: Composition, sample_rate: int = SAMPLE_RATE, use_effects: bool = True, tail: float = 4.5) -> np.ndarray:
     """A whole fixed piece plus its reverb tail, peak-normalised. Shape (samples, 2)."""
     renderer = Renderer(comp.sound, sample_rate, comp.seed, use_effects)
+    renderer.set_style(comp.sound, comp.intensity)
     renderer.set_tempo(comp.tempo)
     renderer.schedule(comp.events)
     mix = renderer.render(int((comp.length_beats * comp.seconds_per_beat + tail) * sample_rate))

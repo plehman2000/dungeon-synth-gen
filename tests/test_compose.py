@@ -2,6 +2,7 @@ import pytest
 
 from dungeon_synth_gen.arrange import STYLES, compose
 from dungeon_synth_gen.parts import DRUM_PATTERNS, FLAVOURS
+from dungeon_synth_gen.theory import GRIM_MODES, darken
 
 
 def test_same_seed_same_piece():
@@ -53,8 +54,10 @@ def test_contrast_section_has_drums():
 def test_combat_is_the_same_piece_at_its_flavours_tempo(seed):
     normal, combat = compose(seed), compose(seed, style="combat")
     assert combat.tempo == FLAVOURS[combat.sound].tempo * normal.tempo
-    assert (combat.scale, combat.sections) == (normal.scale, normal.sections)
-    assert combat.track("lead") == normal.track("lead")
+    assert (combat.scale, combat.sections) == (darken(normal.scale), normal.sections)
+    assert combat.scale.mode in GRIM_MODES
+    rhythm = [(e.start, e.duration) for e in normal.track("lead")]
+    assert [(e.start, e.duration) for e in combat.track("lead")] == rhythm
     assert combat.track("bass") != normal.track("bass")
 
 

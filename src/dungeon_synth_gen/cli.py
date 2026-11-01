@@ -30,6 +30,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--mode", choices=sorted(MODES), help="override the seeded mode")
     parser.add_argument("--root", type=parse_note, help="override the seeded tonic, e.g. D, F#, Bb")
     parser.add_argument("--tempo", type=float, help="override the seeded tempo (BPM)")
+    parser.add_argument(
+        "--intensity", type=float, default=0.5, metavar="0-1",
+        help="how hard the fight is, for combat: 0 sparse and sombre, 1 dense, phrygian and doubled (default 0.5)",
+    )
     parser.add_argument("--dry", action="store_true", help="skip reverb and echo")
     parser.add_argument("--endless", action="store_true", help="play one continuous, ever-evolving stream until Ctrl+C")
     parser.add_argument("--minutes", type=float, help="write this many minutes of the continuous stream to a WAV")
@@ -42,7 +46,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--switch-at needs --minutes")
 
     seed = args.seed if args.seed is not None else random.randrange(1_000_000)
-    overrides = {"style": args.style, "mode": args.mode, "root": args.root, "tempo": args.tempo}
+    overrides = {"style": args.style, "mode": args.mode, "root": args.root, "tempo": args.tempo, "intensity": args.intensity}
     if args.endless:
         return _play_endless(seed, use_effects=not args.dry, **overrides)
     if args.minutes:

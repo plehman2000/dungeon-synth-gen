@@ -7,7 +7,7 @@ so phrases can be laid end to end for a fixed piece or chained forever.
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from dungeon_synth_gen.events import BEATS_PER_BAR, NoteEvent
 from dungeon_synth_gen.theory import Scale, fold
@@ -27,7 +27,7 @@ ROLES = {
 }
 
 # Bass bar patterns: (start beat, length, degree above the chord root).
-# "approach" is a scale step next to the following bar's root.
+# "approach" is a scale step next to the following bar's root; "tonic" is the key's tonic, whatever the chord.
 BASS_STYLES: dict[str, tuple[tuple[float, float, int | str], ...]] = {
     "whole": ((0, 4, 0),),
     "halves": ((0, 2, 0), (2, 2, 4)),
@@ -40,7 +40,12 @@ BASS_STYLES: dict[str, tuple[tuple[float, float, int | str], ...]] = {
     # Darksynth: relentless sixteenths, an octave bounce, and riffs that climb into the next bar.
     "sixteenths": tuple((i / 4, 0.25, 0) for i in range(16)),
     "bounce": tuple((i / 4, 0.25, 7 if i % 4 == 2 else 0) for i in range(16)),
-    "riff": tuple((i / 4, 0.25, d) for i, d in enumerate((0, 0, 7, 0, 0, 0, 4, 0, 0, 0, 7, 0, 5, 4, 2, 1))),
+    "riff": tuple((i / 4, 0.25, d) for i, d in enumerate((0, 0, 7, 0, 0, 0, 1, 0, 0, 0, 7, 0, 6, 4, 3, 1))),
+    # The low tonic hammered in sixteenths, the chord root only on the beat: the harmony moves, the floor never does.
+    "pedal": tuple((i / 4, 0.25, 0 if i % 4 == 0 else "tonic") for i in range(16)),
+    "pedalgallop": tuple(
+        (beat + t, d, 0 if t == 0 else "tonic") for beat in range(4) for t, d in ((0, 0.5), (0.5, 0.25), (0.75, 0.25))
+    ),
     "stomp": ((0, 0.75, 0), (0.75, 0.25, 0), (1, 0.5, 0), (1.5, 0.5, 7), (2, 0.75, 0), (2.75, 0.25, 0), (3, 0.5, 4), (3.5, 0.5, 6)),
     # Industrial: the bass answers the kick on the off-beats.
     "offbeat": tuple((i + 0.5, 0.45, 7 * (i == 3)) for i in range(4)),
@@ -62,6 +67,15 @@ ARP_PATTERNS: tuple[tuple[int, ...], ...] = (
     (0, 1, 2, 3, 0, 1, 2, 3),
     (0, 2, 3, 2, 1, 2, 3, 2),
     (0, 1, 2, 3, 2, 1, 0, 1),
+)
+# Combat arpeggios are power chords over (root, fifth, octave, third): the third,
+# which is what makes a chord sound bright or sad, only flickers past.
+GRIM_ARP_PATTERNS: tuple[tuple[int, ...], ...] = (
+    (0, 0, 2, 0, 1, 0, 2, 1),
+    (0, 2, 1, 2, 0, 2, 1, 0),
+    (0, 1, 2, 1, 0, 1, 3, 1),
+    (0, 0, 1, 0, 0, 0, 2, 1),
+    (2, 1, 0, 1, 2, 1, 0, 1),
 )
 _ARP_VELOCITY = {"intro": 54, "theme": 60, "contrast": 68, "return": 62}
 # Per style: (beats per arpeggio note, beats each note rings). Ambient lets slow notes overlap like a sustain pedal.
@@ -142,15 +156,16 @@ FLAVOURS: dict[str, Flavour] = {
     # Carpenter Brut territory: sixteenth-note distorted saw bass, four on the floor, gated snare, hard pump.
     "brut": Flavour(
         2.0,
-        {"intro": ("sixteenths", "bounce"), "theme": ("sixteenths", "bounce", "riff"),
-         "contrast": ("riff", "stomp", "gallop"), "return": ("bounce", "riff", "sixteenths")},
+        {"intro": ("pedal", "sixteenths"), "theme": ("pedal", "sixteenths", "bounce", "riff"),
+         "contrast": ("riff", "stomp", "pedalgallop"), "return": ("pedal", "bounce", "riff")},
         {"intro": ("four", "pound"), "theme": ("four", "floor16"), "contrast": ("floor16", "halftime", "four"),
          "return": ("four", "floor16")},
         (0.25, 0.22),
     ),
     "darksynth": Flavour(
         2.0,
-        {"intro": ("drive",), "theme": ("drive", "octaves"), "contrast": ("gallop", "stomp"), "return": ("drive", "octaves")},
+        {"intro": ("drive",), "theme": ("drive", "octaves", "pedal"), "contrast": ("gallop", "pedalgallop", "stomp"),
+         "return": ("drive", "octaves")},
         {"intro": ("pound",), "theme": ("drive", "four"), "contrast": ("thrash", "war"), "return": ("drive",)},
         (0.5, 0.45),
     ),
@@ -189,10 +204,40 @@ class Groove:
     sound: str  # the synth set (synth.SOUNDS): the style's name, or a combat flavour's
     tempo: float  # times the calm tempo
     arp: tuple[float, float]  # (beats per arpeggio note, beats each note rings)
+    intensity: float = 0.5  # 0-1, set per phrase by ``intensify``; 0.5 plays the groove as drawn
+
+
+def level(intensity: float) -> float:
+    """Intensity snapped to quarters, so a fight's music moves in audible steps (and synth caches stay small)."""
+    return round(min(1.0, max(0.0, intensity)) * 4) / 4
+
+
+# How each bass pattern thickens in a harder fight, and thins in an easier one.
+_DENSER = {
+    "drive": "sixteenths", "octaves": "bounce", "gallop": "pedalgallop", "offbeat": "offsixteenths",
+    "sludge": "stomp", "halves": "drive", "stomp": "riff",
+}
+_SPARSER = {
+    "sixteenths": "drive", "bounce": "octaves", "pedal": "drive", "riff": "octaves", "pedalgallop": "gallop",
+    "offsixteenths": "offbeat", "stomp": "sludge", "gallop": "drive",
+}
+
+
+def intensify(groove: Groove, intensity: float) -> Groove:
+    """The groove for one phrase of a fight this hard: denser bass and faster arps from 0.75, sparser at 0.25 and below."""
+    x = level(intensity)
+    bass, (step, ring) = groove.bass, groove.arp
+    if x >= 0.75:
+        bass = {role: _DENSER.get(p, p) for role, p in bass.items()}
+        step, ring = min(step, 0.25), min(ring, 0.22)
+    elif x <= 0.25:
+        bass = {role: _SPARSER.get(p, p) for role, p in bass.items()}
+        step, ring = max(step, 0.5), max(ring, 0.45)
+    return replace(groove, bass=bass, arp=(step, ring), intensity=x)
 
 
 def draw_groove(rng: random.Random, style: str) -> Groove:
-    arps = tuple(rng.sample(ARP_PATTERNS, 2))
+    arps = tuple(rng.sample(GRIM_ARP_PATTERNS if style == "combat" else ARP_PATTERNS, 2))
     if style == "combat":
         name = rng.choices(list(FLAVOUR_WEIGHTS), weights=list(FLAVOUR_WEIGHTS.values()))[0]
         flavour = FLAVOURS[name]
@@ -223,7 +268,10 @@ def bassline(
         root = fold(chord)
         next_root = fold(next_chord if is_last else chords[bar + 1])
         for start, length, offset in BASS_STYLES["whole" if ending and is_last else pattern]:
-            degree = next_root + rng.choice((1, -1)) if offset == "approach" else root + offset
+            if offset == "approach":
+                degree = next_root + rng.choice((1, -1))
+            else:
+                degree = 0 if offset == "tonic" else root + offset
             velocity = 96 if start == 0 else 84 if start % 0.5 == 0 else 72  # sixteenths between the eighths sit back
             events.append(NoteEvent("bass", bar * BEATS_PER_BAR + start, length * 0.95, scale.pitch(degree, tonic), velocity))
     return events
@@ -237,7 +285,7 @@ def arpeggio(scale: Scale, tonic: int, chords: tuple[int, ...], groove: Groove, 
     events = []
     for bar, chord in enumerate(chords):
         root = fold(chord)
-        tones = (root, root + 2, root + 4, root + 7)
+        tones = (root, root + 4, root + 7, root + 2) if groove.style == "combat" else (root, root + 2, root + 4, root + 7)
         start = bar * BEATS_PER_BAR
         if ending and bar == len(chords) - 1:
             # Final bar of a fixed piece: roll the chord upward and let it ring.
@@ -252,19 +300,33 @@ def arpeggio(scale: Scale, tonic: int, chords: tuple[int, ...], groove: Groove, 
     return events
 
 
+def _drums_at(pattern: tuple[tuple[int, int, int], ...], intensity: float) -> tuple[tuple[int, int, int], ...]:
+    """A bar pattern for a fight this hard: only the downbeats and snares when easy; sixteenth hats and double kicks when hard."""
+    if intensity <= 0.25:
+        return tuple(p for p in pattern if p[0] % 4 == 0 or p[1] == SNARE)
+    if intensity < 0.75:
+        return pattern
+    taken = {(step, drum) for step, drum, _ in pattern}
+    kicks = (2, 10) if intensity < 1 else (2, 6, 10, 14)
+    extra = [(s, KICK, 82) for s in kicks if (s, KICK) not in taken]
+    extra += [(s, HAT, 62 if s % 2 else 40) for s in range(16) if (s, HAT) not in taken]
+    return pattern + tuple(extra)
+
+
 def percussion(groove: Groove, role: str, bars: int, ending: bool = False) -> list[NoteEvent]:
     if role not in groove.drums:
         return []
     _, filled, crashed = _DRUM_PLANS[groove.style]
-    base = DRUM_PATTERNS[groove.drums[role]]
+    base = _drums_at(DRUM_PATTERNS[groove.drums[role]], groove.intensity)
+    flat_out = groove.intensity >= 0.875  # a crash on every bar, a fill every other bar
     events = []
     for bar in range(bars):
         pattern = base
         if ending and bar == bars - 1:
             pattern = _ENDING_HIT
-        elif bar == 0 and role in crashed:
-            pattern = pattern + ((0, CRASH, 75),)
-        elif role in filled and bar == bars - 1:
+        elif (bar == 0 and role in crashed) or (flat_out and bar % 2 == 0):
+            pattern = pattern + ((0, CRASH, 75 + 25 * flat_out),)
+        elif role in filled and (bar == bars - 1 or (flat_out and bar % 2 == 1)):
             pattern = tuple(p for p in pattern if p[0] < 8) + _FILLS[groove.style]
         for step, drum, velocity in pattern:
             events.append(NoteEvent("perc", bar * BEATS_PER_BAR + step / 4, 0.25, drum, velocity))

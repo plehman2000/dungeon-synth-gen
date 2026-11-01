@@ -41,6 +41,7 @@ class Phrase:
     # same chords and lead, its own groove and tempo, so playback can jump across.
     twin: Phrase | None = None
     sound: str = ""  # synth set (synth.SOUNDS); empty means the style's own
+    intensity: float = 0.5  # 0-1: how hard the fight is, for the synths (synth.Renderer.set_style)
 
     @property
     def voice(self) -> str:
@@ -64,6 +65,7 @@ class Composition:
     style: str = "normal"  # "normal" | "combat" | "ambient"
     events: list[NoteEvent] = field(default_factory=list)
     sound: str = ""  # synth set (synth.SOUNDS); set by compose
+    intensity: float = 0.5
 
     def __post_init__(self):
         self.sound = self.sound or self.style

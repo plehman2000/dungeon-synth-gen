@@ -11,6 +11,7 @@ from dungeon_synth_gen import stream
 from dungeon_synth_gen.arrange import STYLE_WEIGHTS, compose, seeded_style
 from dungeon_synth_gen.endless import endless
 from dungeon_synth_gen.parts import FLAVOURS
+from dungeon_synth_gen.theory import GRIM_MODES
 from dungeon_synth_gen.synth import Renderer
 from dungeon_synth_gen.theory import Scale
 
@@ -75,6 +76,36 @@ def factor(p):
 def test_combat_stream_runs_at_its_flavours_tempo():
     phrases = take(6, 60, style="combat")
     assert all(60 * factor(p) <= p.tempo <= 84 * factor(p) for p in phrases)
+
+
+@pytest.mark.parametrize("style", [None, "combat"])
+def test_combat_is_never_in_a_major_mode(style):
+    for p in take(9, 40, style=style, twins=True):
+        combat = p if p.style == "combat" else p.twin
+        assert combat.scale.mode in GRIM_MODES
+        assert all(combat.scale.contains(e.pitch) for e in combat.events if e.track != "perc")
+
+
+def test_intensity_is_read_before_every_phrase():
+    levels = iter([0.0, 1.0] * 20)
+    for p in take(3, 16, style="combat", intensity=lambda: next(levels)):
+        assert p.intensity in (0.0, 1.0)
+        assert (p.scale.mode == "phrygian") or p.intensity == 0.0
+
+
+def test_harder_fights_are_denser_grimmer_and_faster():
+    easy = take(12, 12, style="combat", intensity=0.0)
+    hard = take(12, 12, style="combat", intensity=1.0)
+    count = lambda ps, track: sum(e.track == track for p in ps for e in p.events)
+    assert count(hard, "perc") > 1.5 * count(easy, "perc")
+    assert count(hard, "bass") > count(easy, "bass")
+    assert count(hard, "lead") > count(easy, "lead")  # doubled an octave up
+    assert all(p.scale.mode == "phrygian" for p in hard)
+    assert all(h.tempo > e.tempo for h, e in zip(hard, easy))
+
+
+def test_calm_phrases_ignore_intensity():
+    assert take(13, 10, style="normal", intensity=1.0) == take(13, 10, style="normal", intensity=0.0)
 
 
 def test_combat_changes_flavour_between_regions():
@@ -159,9 +190,10 @@ def test_twins_leave_the_stream_unchanged_and_share_its_lead(style):
     for p in paired:
         t = p.twin
         assert t.style == ("normal" if p.style == "combat" else "combat")
-        assert (t.section, t.scale, t.beats) == (p.section, p.scale, p.beats)
+        assert (t.section, t.scale.root, t.beats) == (p.section, p.scale.root, p.beats)
         assert t.tempo == pytest.approx(p.tempo / factor(p) * factor(t))
-        assert [e for e in t.events if e.track == "lead"] == [e for e in p.events if e.track == "lead"]
+        rhythm = [(e.start, e.duration) for e in p.events if e.track == "lead"]
+        assert [(e.start, e.duration) for e in t.events if e.track == "lead"] == rhythm
         assert any(e.track == "drone" for e in t.events) == any(e.track == "drone" for e in p.events)
 
 

@@ -56,6 +56,16 @@ CADENCE_CHORDS: dict[str, tuple[int, ...]] = {
     "lydian": (1, 4),
     "mixolydian": (6, 3),
 }
+# Combat plays every key in its grimmest neighbour on the same tonic: phrygian's
+# flat second, or harmonic minor's leading tone and menacing major V. Never major.
+_GRIM: dict[str, str] = {
+    "aeolian": "phrygian", "phrygian": "phrygian", "dorian": "phrygian", "mixolydian": "phrygian",
+    "harmonic": "harmonic", "ionian": "harmonic", "lydian": "harmonic",
+}
+GRIM_MODES = frozenset(_GRIM.values())
+# An easy fight only loses the major third; a desperate one is phrygian, whatever the key.
+_SOMBRE: dict[str, str] = {mode: "aeolian" for mode in ("ionian", "lydian", "mixolydian", "dorian")}
+
 # Chords a phrase may pause on before the theme comes back around.
 _HALF_CADENCE_CHORDS = (1, 3, 4, 6)
 # Chords that open the contrasting section away from the tonic.
@@ -118,6 +128,18 @@ class Scale:
         accidental = "b" if offset < 0 else "#" if offset > 0 else ""
         suffix = {"dim": "o", "aug": "+"}.get(quality, "")
         return accidental + numeral + suffix
+
+
+def darken(scale: Scale, intensity: float = 0.5) -> Scale:
+    """The same tonic in combat's mode: the chords and melody keep their degrees, every note gets grimmer.
+
+    ``intensity`` (0-1) sets how grim: sombre minor below 0.375, phrygian for everything from 0.875.
+    """
+    if intensity < 0.375:
+        return Scale(scale.root, _SOMBRE.get(scale.mode, scale.mode))
+    if intensity >= 0.875:
+        return Scale(scale.root, "phrygian")
+    return Scale(scale.root, _GRIM[scale.mode])
 
 
 def is_chord_tone(degree: int, chord: int) -> bool:

@@ -9,6 +9,7 @@ uv run dungeon-synth-gen --minutes 10          # 10 min of that stream -> out/du
 uv run dungeon-synth-gen --seed 42 --midi      # one 16-bar piece -> out/dungeon_42[_style].wav + .mid
 uv run dungeon-synth-gen --mode phrygian --root D --tempo 64
 uv run dungeon-synth-gen --seed 42 --style combat  # -> out/dungeon_42_combat.wav
+uv run dungeon-synth-gen --seed 42 --style combat --intensity 1  # the same fight, desperate
 uv run dungeon-synth-gen --minutes 2 --switch-at 20,45  # combat on at 0:20, off at 0:45
 uv run pytest
 ```
@@ -56,6 +57,21 @@ Without `--style`, a fixed piece's style is drawn from its seed: normal 2/3, amb
 | `chiptrash` | 2.25x | NES voices at a sprint: triangle gallop bass, thin pulse lead, d-beat and blast beats on the 8-bit kit |
 
 Every section draws its bass and drum patterns from its flavour's pools, and each flavour has its own synths and mastering (`parts.FLAVOURS`, `synth.SOUNDS`).
+
+Combat is never in a major key: it plays the calm music's chords and melody on the same tonic in phrygian or harmonic minor (`theory.darken`), and its arpeggios are power chords where the third only flickers past.
+
+### Intensity
+
+`--intensity 0-1` (or `intensity=` on `compose` / `endless`, which also takes a function read before every phrase, so a game can raise it as a fight gets harder) shapes combat only, in quarter steps:
+
+| | 0 | 0.5 (default) | 1 |
+| --- | --- | --- | --- |
+| Mode | sombre minor | phrygian / harmonic minor | phrygian |
+| Drums | downbeats and snares | the pattern as drawn | sixteenth hats, double kicks, a crash every other bar, fills between |
+| Bass and arps | thinned to eighths | as drawn | sixteenths |
+| Lead | | | doubled an octave up |
+| Synths | less drive and pump, darker filters | as written | more drive, wider unison, open filters, deeper pump |
+| Tempo | -8% | | +8% |
 
 ## Pipeline
 

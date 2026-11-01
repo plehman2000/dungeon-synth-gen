@@ -170,9 +170,13 @@ def build_phrase(
     lead = _lead_plan(rngs.melody, pal, name)
     if lead is not None:
         motifs, anchor, boost = lead
-        events += melody.melody_phrase(
+        lead_notes = melody.melody_phrase(
             rngs.melody, pal.scale, pal.lead_tonic, chords, motifs, anchor, resolve=role == "return", boost=boost
         )
+        events += lead_notes
+        if pal.groove.style == "combat" and pal.groove.intensity >= 0.75:
+            # A hard fight doubles the lead an octave up, so it screams over the riff.
+            events += [replace(e, pitch=e.pitch + 12, velocity=max(1, round(e.velocity * 0.7))) for e in lead_notes]
     events += parts.arpeggio(pal.scale, pal.arp_tonic, chords, pal.groove, role, ending)
     events += parts.bassline(rngs.bass, pal.scale, pal.bass_tonic, chords, pal.groove, role, next_chord, ending)
     events += parts.percussion(pal.groove, role, len(chords), ending)
@@ -183,18 +187,35 @@ def event_order(e: NoteEvent) -> tuple[float, str, int]:
     return (e.start, e.track, e.pitch)
 
 
+def in_combat(pal: Palette, style: str, mode: str | None, intensity: float) -> tuple[Palette, float]:
+    """The palette as a fight this hard plays it, and its tempo lift (0.92-1.08). Calm styles pass through.
+
+    Combat keeps the palette's degrees in a grimmer mode (unless the mode is pinned) and reshapes its groove.
+    """
+    if style != "combat":
+        return pal, 1.0
+    x = parts.level(intensity)
+    scale = pal.scale if mode is not None else theory.darken(pal.scale, x)
+    return replace(pal, scale=scale, groove=parts.intensify(pal.groove, x)), 1 + 0.16 * (x - 0.5)
+
+
 def compose(
-    seed: int, *, style: str = "normal", mode: str | None = None, root: int | None = None, tempo: float | None = None
+    seed: int, *, style: str = "normal", mode: str | None = None, root: int | None = None, tempo: float | None = None,
+    intensity: float = 0.5,
 ) -> Composition:
     scale, drawn = initial_params(seed, style, mode, root, tempo)
     palette_rng = stream(seed, "palette")
-    pal = new_palette(palette_rng, scale, style)
-    tempo = tempo or drawn / TEMPO_SCALE[style] * pal.groove.tempo
+    pal, lift = in_combat(new_palette(palette_rng, scale, style), style, mode, intensity)
+    scale = pal.scale
+    tempo = tempo or drawn / TEMPO_SCALE[style] * pal.groove.tempo * lift
     rngs = PartRngs.for_seed(seed)
     names = ("intro", "theme", "contrast", "return")
     sections = [Section(name, 4 * i, pal.chords(name, palette_rng)) for i, name in enumerate(names)]
 
-    comp = Composition(seed=seed, tempo=tempo, scale=scale, sections=sections, style=style, sound=pal.groove.sound)
+    comp = Composition(
+        seed=seed, tempo=tempo, scale=scale, sections=sections, style=style, sound=pal.groove.sound,
+        intensity=pal.groove.intensity,
+    )
     events = parts.drone(scale, pal.drone_tonic, comp.length_beats)
     for i, section in enumerate(sections):
         is_last = i == len(sections) - 1

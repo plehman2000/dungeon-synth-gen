@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import itertools
 import random
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import replace
 
 from dungeon_synth_gen import arrange, parts, theory
@@ -61,12 +61,17 @@ def _clone(rngs: arrange.PartRngs) -> arrange.PartRngs:
 
 def endless(
     seed: int, *, style: str | None = None, mode: str | None = None, root: int | None = None, tempo: float | None = None,
-    twins: bool = False,
+    twins: bool = False, intensity: float | Callable[[], float] = 0.5,
 ) -> Iterator[Phrase]:
     """Phrases forever. Any of ``style``, ``mode``, ``root``, ``tempo`` pins that parameter for the whole stream.
 
     The stream opens in the same style, key and tempo as ``compose(seed)`` with that seed's style.
+
+    ``intensity`` (0-1, or a function read before every phrase, so a game can
+    raise it as a fight gets harder) shapes combat phrases only: grimmer modes,
+    denser drums and bass, a doubled lead, more drive and a touch more tempo.
     """
+    read = intensity if callable(intensity) else (lambda: intensity)
     current_style = style or arrange.seeded_style(seed)
     scale, bpm = arrange.initial_params(seed, current_style, mode, root, tempo)
     base = bpm / arrange.TEMPO_SCALE[current_style]  # the calm tempo every groove multiplies
@@ -81,25 +86,33 @@ def endless(
         plan = _form(form, first=region == 0)
         chords = [pal.chords(name, palette_rng) for name in plan]
         region_beats = sum(len(c) for c in chords) * BEATS_PER_BAR
-        bpm = tempo or base * pal.groove.tempo
+        region_bpm = tempo or base * pal.groove.tempo
         if twins:
             gear = twin_style(current_style)
-            twin_pal = replace(pal, groove=parts.draw_groove(twin_rng, gear))
-            twin_bpm = bpm / pal.groove.tempo * twin_pal.groove.tempo
+            twin_base = replace(pal, groove=parts.draw_groove(twin_rng, gear))
         for i, name in enumerate(plan):
             is_last = i == len(plan) - 1
             next_chord = 0 if is_last else chords[i + 1][0]
             twin_rngs = _clone(rngs) if twins else None
-            events = arrange.build_phrase(rngs, pal, name, chords[i], next_chord)
+            x = read()
+            own, lift = arrange.in_combat(pal, current_style, mode, x)
+            bpm = region_bpm if tempo else region_bpm * lift
+            events = arrange.build_phrase(rngs, own, name, chords[i], next_chord)
             # Held for the whole region; it releases exactly as the next region's drone fades in.
             drone = parts.drone(pal.scale, pal.drone_tonic, region_beats) if i == 0 else []
             section = Section(name, bar, chords[i])
             twin = None
             if twins:
+                twin_pal, twin_lift = arrange.in_combat(twin_base, gear, mode, x)
+                twin_bpm = region_bpm / pal.groove.tempo * twin_pal.groove.tempo * (1 if tempo else twin_lift)
                 twin_events = arrange.build_phrase(twin_rngs, twin_pal, name, chords[i], next_chord) + drone
-                twin = Phrase(index, region, section, pal.scale, twin_bpm, gear, _ordered(twin_events), sound=twin_pal.groove.sound)
+                twin = Phrase(
+                    index, region, section, twin_pal.scale, twin_bpm, gear, _ordered(twin_events),
+                    sound=twin_pal.groove.sound, intensity=twin_pal.groove.intensity,
+                )
             yield Phrase(
-                index, region, section, pal.scale, bpm, current_style, _ordered(events + drone), twin, pal.groove.sound
+                index, region, section, own.scale, bpm, current_style, _ordered(events + drone), twin,
+                own.groove.sound, own.groove.intensity,
             )
             index += 1
             bar += len(chords[i])
