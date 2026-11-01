@@ -37,11 +37,21 @@ BASS_STYLES: dict[str, tuple[tuple[float, float, int | str], ...]] = {
     "drive": tuple((i / 2, 0.5, 0) for i in range(8)),
     "octaves": tuple((i / 2, 0.5, 7 * (i % 2)) for i in range(8)),
     "gallop": tuple((beat + t, d, 0) for beat in range(4) for t, d in ((0, 0.5), (0.5, 0.25), (0.75, 0.25))),
+    # Darksynth: relentless sixteenths, an octave bounce, and riffs that climb into the next bar.
+    "sixteenths": tuple((i / 4, 0.25, 0) for i in range(16)),
+    "bounce": tuple((i / 4, 0.25, 7 if i % 4 == 2 else 0) for i in range(16)),
+    "riff": tuple((i / 4, 0.25, d) for i, d in enumerate((0, 0, 7, 0, 0, 0, 4, 0, 0, 0, 7, 0, 5, 4, 2, 1))),
+    "stomp": ((0, 0.75, 0), (0.75, 0.25, 0), (1, 0.5, 0), (1.5, 0.5, 7), (2, 0.75, 0), (2.75, 0.25, 0), (3, 0.5, 4), (3.5, 0.5, 6)),
+    # Industrial: the bass answers the kick on the off-beats.
+    "offbeat": tuple((i + 0.5, 0.45, 7 * (i == 3)) for i in range(4)),
+    "offsixteenths": tuple((i / 4, 0.22, 0) for i in range(16) if i % 4),
+    # Doom: slow and heavy, dropping to the seventh below.
+    "sludge": ((0, 2.5, 0), (2.5, 0.5, 0), (3, 1, -1)),
 }
-# Per style: grooves the theme and return pick from, and fixed patterns for the other roles.
+# Calm styles: grooves the theme and return pick from, and fixed patterns for the other roles.
+# Combat draws everything from its flavour (FLAVOURS).
 _BASS_PLANS: dict[str, tuple[tuple[str, ...], dict[str, str]]] = {
     "normal": (("halves", "pulse"), {"intro": "whole", "contrast": "walk"}),
-    "combat": (("drive", "octaves"), {"intro": "drive", "contrast": "gallop"}),
     "ambient": (("whole", "halves"), {"intro": "whole", "contrast": "halves"}),
 }
 
@@ -55,7 +65,7 @@ ARP_PATTERNS: tuple[tuple[int, ...], ...] = (
 )
 _ARP_VELOCITY = {"intro": 54, "theme": 60, "contrast": 68, "return": 62}
 # Per style: (beats per arpeggio note, beats each note rings). Ambient lets slow notes overlap like a sustain pedal.
-_ARP_TIMING = {"normal": (0.5, 0.45), "combat": (0.5, 0.45), "ambient": (1.0, 2.0)}
+_ARP_TIMING = {"normal": (0.5, 0.45), "ambient": (1.0, 2.0)}  # combat's come from its flavour
 
 # Drum bar patterns on a sixteenth-note grid: (step, drum, velocity).
 DRUM_PATTERNS: dict[str, tuple[tuple[int, int, int], ...]] = {
@@ -78,6 +88,26 @@ DRUM_PATTERNS: dict[str, tuple[tuple[int, int, int], ...]] = {
         (0, KICK, 115), (2, KICK, 90), (4, KICK, 95), (4, SNARE, 105), (6, KICK, 90),
         (8, KICK, 110), (10, KICK, 90), (12, KICK, 95), (12, SNARE, 110), (14, KICK, 90),
     ),
+    # Four on the floor under a backbeat, off-beat hats: the darksynth workhorse.
+    "four": (
+        (0, KICK, 118), (2, HAT, 60), (4, KICK, 110), (4, SNARE, 112), (6, HAT, 60),
+        (8, KICK, 115), (10, HAT, 60), (12, KICK, 110), (12, SNARE, 115), (14, HAT, 65),
+    ),
+    "floor16": (
+        (0, KICK, 120), (4, KICK, 110), (4, SNARE, 110), (8, KICK, 116), (11, KICK, 85), (12, KICK, 110), (12, SNARE, 118),
+        *((i, HAT, 70 if i % 2 else 40) for i in range(16)),
+    ),
+    # Half time: the snare only on beat three, so the riff feels twice as heavy.
+    "halftime": ((0, KICK, 118), (3, KICK, 80), (6, KICK, 95), (8, SNARE, 120), (10, KICK, 90), (14, LOW_TOM, 85)),
+    "dbeat": (
+        (0, KICK, 115), (3, KICK, 95), (4, SNARE, 108), (8, KICK, 112), (10, KICK, 95), (12, SNARE, 112),
+        *((i, HAT, 55) for i in range(0, 16, 2)),
+    ),
+    "blast": tuple(hit for i in range(0, 16, 2) for hit in ((i, KICK, 110), (i + 1, SNARE, 90 + 6 * (i % 4 == 2)))),
+    "ebm": (
+        (0, KICK, 118), (4, KICK, 112), (4, SNARE, 105), (8, KICK, 116), (12, KICK, 112), (12, SNARE, 108),
+        *((i, HAT, 75 if i % 4 == 2 else 35) for i in range(16)),
+    ),
 }
 # Replace the second half of a section's last bar.
 _FILLS = {
@@ -91,31 +121,89 @@ _FILLS = {
 # roles that end on a fill, and roles that open on a crash.
 _DRUM_PLANS: dict[str, tuple[dict[str, str | tuple[str, ...]], tuple[str, ...], tuple[str, ...]]] = {
     "normal": ({"theme": "heartbeat", "contrast": ("march", "war"), "return": "heartbeat"}, ("contrast",), ("return",)),
-    "combat": (
-        {"intro": "pound", "theme": "drive", "contrast": ("thrash", "war"), "return": "drive"},
-        ("intro", "theme", "contrast"),
-        ("theme", "contrast", "return"),
-    ),
+    "combat": ({}, ("intro", "theme", "contrast"), ("theme", "contrast", "return")),  # its patterns are in FLAVOURS
     "ambient": ({}, (), ()),  # no drums at all
 }
 _ENDING_HIT = ((0, KICK, 110), (0, CRASH, 90))
 
 
 @dataclass(frozen=True)
+class Flavour:
+    """One kind of combat music: its synths (``synth.SOUNDS``), tempo, and the patterns each role draws from."""
+
+    tempo: float  # times the calm tempo
+    bass: dict[str, tuple[str, ...]]  # role -> bass patterns to draw from
+    drums: dict[str, tuple[str, ...]]  # role -> drum patterns to draw from
+    arp: tuple[float, float]  # (beats per arpeggio note, beats each note rings)
+
+
+# Every combat region draws one, so a long fight keeps changing gear.
+FLAVOURS: dict[str, Flavour] = {
+    # Carpenter Brut territory: sixteenth-note distorted saw bass, four on the floor, gated snare, hard pump.
+    "brut": Flavour(
+        2.0,
+        {"intro": ("sixteenths", "bounce"), "theme": ("sixteenths", "bounce", "riff"),
+         "contrast": ("riff", "stomp", "gallop"), "return": ("bounce", "riff", "sixteenths")},
+        {"intro": ("four", "pound"), "theme": ("four", "floor16"), "contrast": ("floor16", "halftime", "four"),
+         "return": ("four", "floor16")},
+        (0.25, 0.22),
+    ),
+    "darksynth": Flavour(
+        2.0,
+        {"intro": ("drive",), "theme": ("drive", "octaves"), "contrast": ("gallop", "stomp"), "return": ("drive", "octaves")},
+        {"intro": ("pound",), "theme": ("drive", "four"), "contrast": ("thrash", "war"), "return": ("drive",)},
+        (0.5, 0.45),
+    ),
+    "industrial": Flavour(
+        1.75,
+        {"intro": ("offbeat",), "theme": ("offbeat", "offsixteenths"), "contrast": ("offsixteenths", "sixteenths"),
+         "return": ("offbeat", "offsixteenths")},
+        {"intro": ("ebm",), "theme": ("ebm", "four"), "contrast": ("ebm", "dbeat"), "return": ("ebm",)},
+        (0.25, 0.15),
+    ),
+    "doom": Flavour(
+        1.5,
+        {"intro": ("sludge",), "theme": ("sludge", "stomp"), "contrast": ("stomp", "gallop"), "return": ("sludge", "halves")},
+        {"intro": ("halftime",), "theme": ("halftime", "pound"), "contrast": ("war", "dbeat"), "return": ("halftime",)},
+        (1.0, 0.9),
+    ),
+    "chiptrash": Flavour(
+        2.25,
+        {"intro": ("gallop",), "theme": ("gallop", "octaves", "bounce"), "contrast": ("riff", "drive"),
+         "return": ("gallop", "octaves")},
+        {"intro": ("dbeat",), "theme": ("dbeat", "thrash"), "contrast": ("blast", "thrash"), "return": ("dbeat",)},
+        (0.25, 0.2),
+    ),
+}
+FLAVOUR_WEIGHTS = {"brut": 4, "darksynth": 2, "industrial": 2, "doom": 1.5, "chiptrash": 1}
+
+
+@dataclass(frozen=True)
 class Groove:
     """Accompaniment choices shared by every phrase in a key region."""
 
-    style: str  # "normal" | "combat"
-    bass: str  # bass pattern for the theme and return
+    style: str  # "normal" | "combat" | "ambient"
+    bass: dict[str, str]  # bass pattern per role
     drums: dict[str, str]  # drum pattern per role
     arps: tuple[tuple[int, ...], tuple[int, ...]]  # (main, contrast) arpeggio patterns
+    sound: str  # the synth set (synth.SOUNDS): the style's name, or a combat flavour's
+    tempo: float  # times the calm tempo
+    arp: tuple[float, float]  # (beats per arpeggio note, beats each note rings)
 
 
 def draw_groove(rng: random.Random, style: str) -> Groove:
     arps = tuple(rng.sample(ARP_PATTERNS, 2))
-    bass = rng.choice(_BASS_PLANS[style][0])
+    if style == "combat":
+        name = rng.choices(list(FLAVOUR_WEIGHTS), weights=list(FLAVOUR_WEIGHTS.values()))[0]
+        flavour = FLAVOURS[name]
+        bass = {role: rng.choice(p) for role, p in flavour.bass.items()}
+        drums = {role: rng.choice(p) for role, p in flavour.drums.items()}
+        return Groove(style, bass, drums, arps, name, flavour.tempo, flavour.arp)
+    choices, fixed = _BASS_PLANS[style]
+    main = rng.choice(choices)
+    bass = {role: fixed.get(role, main) for role in ("intro", "theme", "contrast", "return")}
     drums = {role: p if isinstance(p, str) else rng.choice(p) for role, p in _DRUM_PLANS[style][0].items()}
-    return Groove(style, bass, drums, arps)
+    return Groove(style, bass, drums, arps, style, 1.0, _ARP_TIMING[style])
 
 
 def drone(scale: Scale, tonic: int, beats: float) -> list[NoteEvent]:
@@ -128,7 +216,7 @@ def bassline(
     next_chord: int, ending: bool = False,
 ) -> list[NoteEvent]:
     """One phrase of bass; ``next_chord`` opens the following phrase, for approach notes."""
-    pattern = _BASS_PLANS[groove.style][1].get(role, groove.bass)
+    pattern = groove.bass[role]
     events = []
     for bar, chord in enumerate(chords):
         is_last = bar == len(chords) - 1
@@ -136,7 +224,7 @@ def bassline(
         next_root = fold(next_chord if is_last else chords[bar + 1])
         for start, length, offset in BASS_STYLES["whole" if ending and is_last else pattern]:
             degree = next_root + rng.choice((1, -1)) if offset == "approach" else root + offset
-            velocity = 96 if start == 0 else 84
+            velocity = 96 if start == 0 else 84 if start % 0.5 == 0 else 72  # sixteenths between the eighths sit back
             events.append(NoteEvent("bass", bar * BEATS_PER_BAR + start, length * 0.95, scale.pitch(degree, tonic), velocity))
     return events
 
@@ -145,7 +233,7 @@ def arpeggio(scale: Scale, tonic: int, chords: tuple[int, ...], groove: Groove, 
     main, contrast = groove.arps
     pattern = contrast if role == "contrast" else main
     velocity = _ARP_VELOCITY[role]
-    step_beats, ring = _ARP_TIMING[groove.style]
+    step_beats, ring = groove.arp
     events = []
     for bar, chord in enumerate(chords):
         root = fold(chord)

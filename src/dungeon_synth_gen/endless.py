@@ -69,6 +69,7 @@ def endless(
     """
     current_style = style or arrange.seeded_style(seed)
     scale, bpm = arrange.initial_params(seed, current_style, mode, root, tempo)
+    base = bpm / arrange.TEMPO_SCALE[current_style]  # the calm tempo every groove multiplies
     form = arrange.stream(seed, "form")
     palette_rng = arrange.stream(seed, "palette")
     twin_rng = arrange.stream(seed, "twin")
@@ -80,10 +81,11 @@ def endless(
         plan = _form(form, first=region == 0)
         chords = [pal.chords(name, palette_rng) for name in plan]
         region_beats = sum(len(c) for c in chords) * BEATS_PER_BAR
+        bpm = tempo or base * pal.groove.tempo
         if twins:
             gear = twin_style(current_style)
             twin_pal = replace(pal, groove=parts.draw_groove(twin_rng, gear))
-            twin_bpm = bpm / arrange.TEMPO_SCALE[current_style] * arrange.TEMPO_SCALE[gear]
+            twin_bpm = bpm / pal.groove.tempo * twin_pal.groove.tempo
         for i, name in enumerate(plan):
             is_last = i == len(plan) - 1
             next_chord = 0 if is_last else chords[i + 1][0]
@@ -95,8 +97,10 @@ def endless(
             twin = None
             if twins:
                 twin_events = arrange.build_phrase(twin_rngs, twin_pal, name, chords[i], next_chord) + drone
-                twin = Phrase(index, region, section, pal.scale, twin_bpm, gear, _ordered(twin_events))
-            yield Phrase(index, region, section, pal.scale, bpm, current_style, _ordered(events + drone), twin)
+                twin = Phrase(index, region, section, pal.scale, twin_bpm, gear, _ordered(twin_events), sound=twin_pal.groove.sound)
+            yield Phrase(
+                index, region, section, pal.scale, bpm, current_style, _ordered(events + drone), twin, pal.groove.sound
+            )
             index += 1
             bar += len(chords[i])
 
@@ -107,8 +111,6 @@ def endless(
         next_mode = mode or (pal.scale.mode if keep_mode else arrange.draw_mode(form, current_style))
         next_scale = Scale(root, next_mode) if root is not None else theory.modulate(form, pal.scale, next_mode)
         if tempo is None:
-            factor = arrange.TEMPO_SCALE[current_style]
-            low, high = (t * factor for t in arrange.TEMPO_RANGE)
-            bpm = bpm / arrange.TEMPO_SCALE[previous_style] * factor
-            bpm = min(high, max(low, bpm + form.choice(_TEMPO_STEPS) * factor))
+            low, high = arrange.TEMPO_RANGE
+            base = min(high, max(low, base + form.choice(_TEMPO_STEPS)))
         pal = arrange.new_palette(palette_rng, next_scale, current_style, previous=pal)

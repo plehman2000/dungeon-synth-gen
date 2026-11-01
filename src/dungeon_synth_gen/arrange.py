@@ -36,7 +36,7 @@ _MODE_WEIGHTS = {
 }
 _ROOTS = ("D", "E", "A", "C", "G", "F#", "B")
 TEMPO_RANGE = (60, 84)
-TEMPO_SCALE = {"normal": 1, "combat": 2, "ambient": 1}
+TEMPO_SCALE = {"normal": 1, "combat": 2, "ambient": 1}  # for the opening draw; each groove then sets its own
 STYLES = tuple(TEMPO_SCALE)
 STYLE_WEIGHTS = {"normal": 2, "ambient": 1}
 _RHYTHMS = {"normal": melody.MOTIF_RHYTHMS, "combat": melody.MOTIF_RHYTHMS, "ambient": melody.AMBIENT_RHYTHMS}
@@ -186,14 +186,15 @@ def event_order(e: NoteEvent) -> tuple[float, str, int]:
 def compose(
     seed: int, *, style: str = "normal", mode: str | None = None, root: int | None = None, tempo: float | None = None
 ) -> Composition:
-    scale, tempo = initial_params(seed, style, mode, root, tempo)
+    scale, drawn = initial_params(seed, style, mode, root, tempo)
     palette_rng = stream(seed, "palette")
     pal = new_palette(palette_rng, scale, style)
+    tempo = tempo or drawn / TEMPO_SCALE[style] * pal.groove.tempo
     rngs = PartRngs.for_seed(seed)
     names = ("intro", "theme", "contrast", "return")
     sections = [Section(name, 4 * i, pal.chords(name, palette_rng)) for i, name in enumerate(names)]
 
-    comp = Composition(seed=seed, tempo=tempo, scale=scale, sections=sections, style=style)
+    comp = Composition(seed=seed, tempo=tempo, scale=scale, sections=sections, style=style, sound=pal.groove.sound)
     events = parts.drone(scale, pal.drone_tonic, comp.length_beats)
     for i, section in enumerate(sections):
         is_last = i == len(sections) - 1

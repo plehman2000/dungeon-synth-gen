@@ -41,9 +41,21 @@ During `--endless`, press `c` to toggle combat on and off. The switch is instant
 | --- | --- |
 | `normal` | Slow dungeon crawl, 60-84 BPM, minor modes, drums only from the theme on |
 | `ambient` | Calm and open: major-side modes (ionian, lydian, mixolydian, some dorian), a soft plucked triangle lead, slow ringing arpeggios, long notes and rests, no drums |
-| `combat` | The same seed's chords and melody in double time (120-168 BPM), with eighth-note and gallop bass, backbeat snare and double kicks in every section, fills between sections, and darksynth voices: a five-saw supersaw lead, a distorted reese bass over a clean sub, driven saw plucks, and a wide pad, all pumping against the drums like a sidechained mix. An 80s darksynth kit: a hard clipped kick, big toms, and a snare with a gated reverb tail |
+| `combat` | The same seed's chords and melody, faster, with drums in every section and fills between them. Each key region draws one of five flavours (below), so a long fight keeps changing gear |
 
-Without `--style`, a fixed piece's style is drawn from its seed: normal 2/3, ambient 1/3. Combat pieces are 16 bars like the others, so they run about 30 s.
+Without `--style`, a fixed piece's style is drawn from its seed: normal 2/3, ambient 1/3. Combat pieces are 16 bars like the others, so they run 25-40 s.
+
+### Combat flavours
+
+| Flavour | Tempo | Sound |
+| --- | --- | --- |
+| `brut` (most likely) | 2x | Carpenter Brut-style darksynth: sixteenth-note bass, octave bounces and climbing riffs on a distorted reese over a full sub, four on the floor with a gated snare, a seven-saw lead driven into fuzz, and a hard sidechain pump |
+| `darksynth` | 2x | Eighth-note drive and gallop bass, a five-saw supersaw lead, driven saw plucks, backbeat and thrash drums |
+| `industrial` | 1.75x | Clipped square waves, off-beat pulse bass answering the kick, sixteenth hats, an echoing needle arp |
+| `doom` | 1.5x | Half-time snare, sludge bass that drops to the seventh, fuzz-pulse lead, a cavernous room |
+| `chiptrash` | 2.25x | NES voices at a sprint: triangle gallop bass, thin pulse lead, d-beat and blast beats on the 8-bit kit |
+
+Every section draws its bass and drum patterns from its flavour's pools, and each flavour has its own synths and mastering (`parts.FLAVOURS`, `synth.SOUNDS`).
 
 ## Pipeline
 

@@ -40,6 +40,11 @@ class Phrase:
     # The same phrase in the other gear (combat, or normal for a combat region):
     # same chords and lead, its own groove and tempo, so playback can jump across.
     twin: Phrase | None = None
+    sound: str = ""  # synth set (synth.SOUNDS); empty means the style's own
+
+    @property
+    def voice(self) -> str:
+        return self.sound or self.style
 
     @property
     def beats(self) -> float:
@@ -47,7 +52,7 @@ class Phrase:
 
     def describe(self) -> str:
         chords = "  ".join(f"{self.scale.roman(c):<5}" for c in self.section.chords)
-        return f"{self.style:<8} {self.scale.name:<16} {self.tempo:>3g} BPM  {self.section.name:<12} {chords}"
+        return f"{self.voice:<10} {self.scale.name:<16} {self.tempo:>3g} BPM  {self.section.name:<12} {chords}"
 
 
 @dataclass
@@ -56,8 +61,12 @@ class Composition:
     tempo: float
     scale: Scale
     sections: list[Section]
-    style: str = "normal"  # "normal" | "combat"
+    style: str = "normal"  # "normal" | "combat" | "ambient"
     events: list[NoteEvent] = field(default_factory=list)
+    sound: str = ""  # synth set (synth.SOUNDS); set by compose
+
+    def __post_init__(self):
+        self.sound = self.sound or self.style
 
     @property
     def bars(self) -> int:

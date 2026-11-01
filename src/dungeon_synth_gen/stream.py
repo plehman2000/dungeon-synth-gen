@@ -44,7 +44,7 @@ class CombatSwitch:
 
 
 def _play(renderer: Renderer, phrase: Phrase) -> np.ndarray:
-    renderer.set_style(phrase.style)
+    renderer.set_style(phrase.voice)
     renderer.set_tempo(phrase.tempo)
     return renderer.play(phrase.events, phrase.beats)
 

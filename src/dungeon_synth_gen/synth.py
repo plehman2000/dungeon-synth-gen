@@ -119,12 +119,94 @@ AMBIENT_INSTRUMENTS: dict[str, Instrument] = INSTRUMENTS | {
     "bass": replace(INSTRUMENTS["bass"], gain=0.3, attack=0.02, decay=1.5, sustain=0.4, release=0.5),
     "drone": replace(INSTRUMENTS["drone"], gain=0.08, lowpass=380),
 }
-_STYLE_INSTRUMENTS = {"normal": INSTRUMENTS, "combat": COMBAT_INSTRUMENTS, "ambient": AMBIENT_INSTRUMENTS}
+# Brut: Carpenter Brut-style darksynth turned up. A seven-saw lead driven
+# into fuzz, a screaming reese bass over a full sub that the kick flattens on
+# every beat, and short driven plucks ricocheting through the echo.
+BRUT_INSTRUMENTS: dict[str, Instrument] = {
+    "lead": Instrument(
+        "saw", gain=0.26, attack=0.004, decay=0.2, sustain=0.75, release=0.15, lowpass=6500,
+        vibrato_depth=0.1, vibrato_rate=6.0, vibrato_delay=0.25, detune_cents=24, voices=7, spread=0.7,
+        note_lowpass=2200, pluck=0.3, drive=4.0, duck=0.3, reverb=0.25, echo=0.35,
+    ),
+    "arp": Instrument(
+        "saw", gain=0.13, pan=-0.25, attack=0.001, decay=0.08, sustain=0.3, release=0.05, lowpass=8000,
+        detune_cents=10, spread=0.6, note_lowpass=700, pluck=0.05, drive=3.0, duck=0.6, reverb=0.15, echo=0.4,
+    ),
+    "bass": Instrument(
+        "saw", gain=0.27, attack=0.002, decay=0.1, sustain=0.8, release=0.03, lowpass=3500,
+        detune_cents=20, voices=3, spread=0.2, note_lowpass=500, pluck=0.07, drive=6.0, sub=1.0, duck=0.8, reverb=0.03,
+    ),
+    "drone": replace(COMBAT_INSTRUMENTS["drone"], gain=0.08, duck=0.95),
+    "perc": replace(COMBAT_INSTRUMENTS["perc"], gain=0.36, lowpass=14000, reverb=0.25),
+}
+# Industrial: hard square waves, a clipped pulse bass answering the kick on
+# the off-beats, and a thin needle of an arp soaked in echo.
+INDUSTRIAL_INSTRUMENTS: dict[str, Instrument] = {
+    "lead": Instrument(
+        "square", gain=0.22, attack=0.003, decay=0.15, sustain=0.6, release=0.1, lowpass=5000,
+        detune_cents=8, spread=0.3, note_lowpass=1500, pluck=0.12, drive=3.5, duck=0.3, reverb=0.3, echo=0.45,
+    ),
+    "arp": Instrument(
+        "square", gain=0.11, pan=0.35, duty=0.125, attack=0.001, decay=0.06, sustain=0.1, release=0.04,
+        lowpass=6000, drive=2.0, duck=0.5, reverb=0.25, echo=0.5,
+    ),
+    "bass": Instrument(
+        "square", gain=0.25, duty=0.3, attack=0.002, decay=0.08, sustain=0.7, release=0.03, lowpass=3000,
+        note_lowpass=450, pluck=0.05, drive=4.0, sub=0.8, duck=0.7, reverb=0.05,
+    ),
+    "drone": replace(COMBAT_INSTRUMENTS["drone"], lowpass=900),
+    "perc": replace(COMBAT_INSTRUMENTS["perc"], gain=0.34, reverb=0.3),
+}
+# Doom: everything fuzzed and slow. A wide fuzz-pulse lead, a sludge bass
+# that growls open on each note, and a cavernous room.
+DOOM_INSTRUMENTS: dict[str, Instrument] = {
+    "lead": Instrument(
+        "square", gain=0.24, duty=0.25, attack=0.01, decay=0.4, sustain=0.8, release=0.4, lowpass=3500,
+        vibrato_depth=0.25, vibrato_rate=4.5, vibrato_delay=0.35, detune_cents=10, voices=3, spread=0.5,
+        note_lowpass=1800, drive=6.0, duck=0.15, reverb=0.45, echo=0.3,
+    ),
+    "arp": Instrument(
+        "saw", gain=0.11, pan=0.3, attack=0.005, decay=0.5, sustain=0.3, release=0.4, lowpass=2500,
+        detune_cents=10, spread=0.6, drive=2.5, duck=0.3, reverb=0.5, echo=0.25,
+    ),
+    "bass": Instrument(
+        "saw", gain=0.29, attack=0.005, decay=0.4, sustain=0.9, release=0.2, lowpass=2000,
+        detune_cents=25, voices=3, spread=0.3, note_lowpass=300, pluck=0.25, drive=7.0, sub=1.0, duck=0.5, reverb=0.1,
+    ),
+    "drone": replace(COMBAT_INSTRUMENTS["drone"], gain=0.09, lowpass=800, duck=0.6),
+    "perc": replace(COMBAT_INSTRUMENTS["perc"], gain=0.36, reverb=0.45),
+}
+# Chiptrash: the NES voices at a sprint, a thin pulse lead with a little bite,
+# and the 8-bit kit hit hard.
+CHIPTRASH_INSTRUMENTS: dict[str, Instrument] = {
+    "lead": replace(
+        INSTRUMENTS["lead"], duty=0.125, gain=0.25, decay=0.15, sustain=0.7, release=0.1, lowpass=6000,
+        vibrato_depth=0.12, vibrato_rate=6.5, drive=1.5, duck=0.2, reverb=0.2, echo=0.3,
+    ),
+    "arp": replace(INSTRUMENTS["arp"], gain=0.13, decay=0.08, sustain=0.2, release=0.05, lowpass=5000, echo=0.25),
+    "bass": replace(INSTRUMENTS["bass"], gain=0.42, decay=0.1, sustain=0.9, release=0.03, lowpass=4000, duck=0.3),
+    "drone": replace(INSTRUMENTS["drone"], gain=0.06),
+    "perc": replace(INSTRUMENTS["perc"], gain=0.5, lowpass=9000, reverb=0.25),
+}
+# Synth sets by name: each style's own, and one per combat flavour (parts.FLAVOURS).
+SOUNDS: dict[str, dict[str, Instrument]] = {
+    "normal": INSTRUMENTS,
+    "ambient": AMBIENT_INSTRUMENTS,
+    "combat": COMBAT_INSTRUMENTS,
+    "darksynth": COMBAT_INSTRUMENTS,
+    "brut": BRUT_INSTRUMENTS,
+    "industrial": INDUSTRIAL_INSTRUMENTS,
+    "doom": DOOM_INSTRUMENTS,
+    "chiptrash": CHIPTRASH_INSTRUMENTS,
+}
 # Master saturation: gentle rounds off drum peaks, combat squashes harder.
-_DRIVE = {"normal": 1.6, "combat": 2.4, "ambient": 1.6}
-# Typical raw-mix peak per style. A stream can't normalise to a peak it hasn't
+_DRIVE = {"normal": 1.6, "ambient": 1.6, "combat": 2.4, "darksynth": 2.4, "brut": 3.0, "industrial": 2.8, "doom": 2.6, "chiptrash": 2.2}
+# Typical raw-mix peak per sound. A stream can't normalise to a peak it hasn't
 # heard yet, so it saturates against this fixed reference instead.
-_STREAM_REFERENCE = {"normal": 0.85, "combat": 1.05, "ambient": 0.75}
+_STREAM_REFERENCE = {
+    "normal": 0.85, "ambient": 0.75, "combat": 1.05, "darksynth": 1.05,
+    "brut": 1.1, "industrial": 1.2, "doom": 1.45, "chiptrash": 0.85,
+}
 
 
 def _blep(t: np.ndarray, dt: np.ndarray) -> np.ndarray:
@@ -348,9 +430,9 @@ class Renderer:
             self._reverb = effects.Reverb(effects.impulse_response(sample_rate, seed))
 
     def set_style(self, style: str) -> None:
-        """Instruments and mastering for whatever is scheduled from now on."""
+        """Instruments and mastering for whatever is scheduled from now on: a style, or any name in ``SOUNDS``."""
         self.style = style
-        self.instruments = _STYLE_INSTRUMENTS[style]
+        self.instruments = SOUNDS[style]
 
     def set_tempo(self, bpm: float) -> None:
         self.seconds_per_beat = 60.0 / bpm
@@ -426,11 +508,11 @@ class Renderer:
 
 def render(comp: Composition, sample_rate: int = SAMPLE_RATE, use_effects: bool = True, tail: float = 4.5) -> np.ndarray:
     """A whole fixed piece plus its reverb tail, peak-normalised. Shape (samples, 2)."""
-    renderer = Renderer(comp.style, sample_rate, comp.seed, use_effects)
+    renderer = Renderer(comp.sound, sample_rate, comp.seed, use_effects)
     renderer.set_tempo(comp.tempo)
     renderer.schedule(comp.events)
     mix = renderer.render(int((comp.length_beats * comp.seconds_per_beat + tail) * sample_rate))
-    return _master(mix, sample_rate, _DRIVE[comp.style])
+    return _master(mix, sample_rate, _DRIVE[comp.sound])
 
 
 def _master(mix: np.ndarray, sample_rate: int, drive: float) -> np.ndarray:

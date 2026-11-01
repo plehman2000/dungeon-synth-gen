@@ -10,6 +10,7 @@ import pytest
 from dungeon_synth_gen import stream
 from dungeon_synth_gen.arrange import STYLE_WEIGHTS, compose, seeded_style
 from dungeon_synth_gen.endless import endless
+from dungeon_synth_gen.parts import FLAVOURS
 from dungeon_synth_gen.synth import Renderer
 from dungeon_synth_gen.theory import Scale
 
@@ -67,8 +68,18 @@ def test_pins_hold_for_the_whole_stream():
         assert (p.style, p.scale, p.tempo) == ("normal", Scale(2, "dorian"), 70)
 
 
-def test_combat_stream_stays_in_double_time():
-    assert all(120 <= p.tempo <= 168 for p in take(6, 25, style="combat"))
+def factor(p):
+    return FLAVOURS[p.sound].tempo if p.style == "combat" else 1
+
+
+def test_combat_stream_runs_at_its_flavours_tempo():
+    phrases = take(6, 60, style="combat")
+    assert all(60 * factor(p) <= p.tempo <= 84 * factor(p) for p in phrases)
+
+
+def test_combat_changes_flavour_between_regions():
+    sounds = {p.sound for seed in range(4) for p in take(seed, 80, style="combat")}
+    assert len(sounds) >= 4 and sounds <= set(FLAVOURS)
 
 
 @pytest.mark.parametrize("style", ["normal", "ambient", "combat"])
@@ -149,7 +160,7 @@ def test_twins_leave_the_stream_unchanged_and_share_its_lead(style):
         t = p.twin
         assert t.style == ("normal" if p.style == "combat" else "combat")
         assert (t.section, t.scale, t.beats) == (p.section, p.scale, p.beats)
-        assert t.tempo == p.tempo * (0.5 if p.style == "combat" else 2)
+        assert t.tempo == pytest.approx(p.tempo / factor(p) * factor(t))
         assert [e for e in t.events if e.track == "lead"] == [e for e in p.events if e.track == "lead"]
         assert any(e.track == "drone" for e in t.events) == any(e.track == "drone" for e in p.events)
 
