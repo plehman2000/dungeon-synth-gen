@@ -180,14 +180,14 @@ FLAVOURS: dict[str, Flavour] = {
     # Ambient. Soft plucks ringing over one another.
     "harp": Flavour(
         1.0,
-        {"intro": ("whole",), "theme": ("whole", "halves"), "contrast": ("halves",), "return": ("whole", "halves")},
+        {"intro": ("whole",), "theme": ("whole",), "contrast": ("halves",), "return": ("whole",)},
         {},
         (1.0, 2.0),
     ),
     # A slow-swelling choir of saws over a held chord.
     "mist": Flavour(
         0.8,
-        {"intro": ("whole",), "theme": ("whole",), "contrast": ("halves",), "return": ("whole",)},
+        {"intro": ("whole",), "theme": ("whole",), "contrast": ("whole",), "return": ("whole",)},
         {},
         (2.0, 3.0),
         pad=(0, 4, 9),
@@ -195,7 +195,7 @@ FLAVOURS: dict[str, Flavour] = {
     # A music box an octave up, chiming over eighths.
     "musicbox": Flavour(
         1.0,
-        {"intro": ("whole",), "theme": ("halves",), "contrast": ("halves",), "return": ("halves",)},
+        {"intro": ("whole",), "theme": ("whole",), "contrast": ("halves",), "return": ("whole",)},
         {},
         (0.5, 1.0),
         lead_octave=1,

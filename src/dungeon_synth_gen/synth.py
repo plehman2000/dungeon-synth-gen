@@ -41,7 +41,7 @@ _PUMP_DRUMS = (KICK, SNARE, LOW_TOM, MID_TOM)  # on the beat, these trigger the 
 
 @dataclass(frozen=True)
 class Instrument:
-    wave: str  # "square" | "saw" | "triangle" | "drums"
+    wave: str  # "square" | "saw" | "triangle" (the NES's 4-bit staircase) | "sine" | "drums"
     gain: float
     pan: float = 0.0  # -1 left .. 1 right
     duty: float = 0.5
@@ -116,7 +116,10 @@ AMBIENT_INSTRUMENTS: dict[str, Instrument] = INSTRUMENTS | {
         lowpass=2400, vibrato_depth=0.0, reverb=0.6, echo=0.35,
     ),
     "arp": replace(INSTRUMENTS["arp"], duty=0.5, gain=0.115, decay=1.4, sustain=0.0, release=0.6, lowpass=1100, reverb=0.7, echo=0.0),
-    "bass": replace(INSTRUMENTS["bass"], gain=0.3, attack=0.02, decay=1.5, sustain=0.4, release=0.5),
+    # A round sine with a little warmth: the NES triangle's staircase buzzes on long low notes this sparse.
+    "bass": replace(
+        INSTRUMENTS["bass"], wave="sine", gain=0.12, attack=0.02, decay=1.5, sustain=0.4, release=0.5, drive=1.2,
+    ),
     "drone": replace(INSTRUMENTS["drone"], gain=0.08, lowpass=380),
 }
 # Brut: Carpenter Brut-style darksynth turned up. A seven-saw lead driven
@@ -217,7 +220,7 @@ HARPSICHORD_INSTRUMENTS: dict[str, Instrument] = INSTRUMENTS | {
         "saw", gain=0.1, pan=-0.3, attack=0.001, decay=0.35, sustain=0.0, release=0.15, lowpass=6000,
         note_lowpass=1800, pluck=0.08, reverb=0.35, echo=0.1,
     ),
-    "bass": replace(INSTRUMENTS["bass"], gain=0.34, decay=0.4, sustain=0.3, release=0.15),
+    "bass": replace(INSTRUMENTS["bass"], wave="sine", gain=0.09, decay=0.4, sustain=0.3, release=0.15, drive=1.2),
     "drone": replace(INSTRUMENTS["drone"], gain=0.06),
 }
 # March: a thinner pulse lead, a clipped arp, and the drums up front.
@@ -306,8 +309,8 @@ _DRIVE = {**dict.fromkeys(_CALM_SOUNDS, 1.6), "combat": 2.4, "darksynth": 2.4, "
 # Typical raw-mix peak per sound. A stream can't normalise to a peak it hasn't
 # heard yet, so it saturates against this fixed reference instead.
 _STREAM_REFERENCE = {
-    "normal": 0.85, "ambient": 0.75, "crypt": 0.85, "organ": 1.0, "harpsichord": 0.37, "march": 0.8,
-    "harp": 0.75, "mist": 0.6, "musicbox": 0.6, "combat": 1.05, "darksynth": 1.05,
+    "normal": 0.85, "ambient": 0.75, "crypt": 0.85, "organ": 1.0, "harpsichord": 0.29, "march": 0.8,
+    "harp": 0.75, "mist": 0.54, "musicbox": 0.5, "combat": 1.05, "darksynth": 1.05,
     "brut": 1.1, "industrial": 1.2, "doom": 1.45, "chiptrash": 0.85,
 }
 
@@ -332,6 +335,8 @@ def oscillator(wave_name: str, phase: np.ndarray, dt: np.ndarray, duty: float = 
         return y - (2 * duty - 1)  # remove the DC offset of narrow pulses
     if wave_name == "saw":
         return 2 * t - 1 - _blep(t, dt)
+    if wave_name == "sine":
+        return np.sin(2 * np.pi * t)
     if wave_name == "triangle":
         # Averaging the staircase across each sample lets a step land between
         # samples; snapped to the sample grid, the steps alias into a grainy hiss.
