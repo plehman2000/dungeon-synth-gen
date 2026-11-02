@@ -70,7 +70,7 @@ def test_pins_hold_for_the_whole_stream():
 
 
 def factor(p):
-    return FLAVOURS[p.sound].tempo if p.style == "combat" else 1
+    return FLAVOURS[p.sound].tempo
 
 
 def test_combat_stream_runs_at_its_flavours_tempo():
@@ -113,6 +113,25 @@ def test_combat_chords_never_turn_diminished(intensity):
 
 def test_calm_phrases_ignore_intensity():
     assert take(13, 10, style="normal", intensity=1.0) == take(13, 10, style="normal", intensity=0.0)
+
+
+def test_calm_music_changes_flavour_between_regions():
+    sounds = {p.sound for seed in range(6) for p in take(seed, 60)}
+    assert len(sounds) >= 5 and sounds <= set(FLAVOURS)
+
+
+def test_lead_bars_rarely_repeat():
+    """Most bars of a calm stream's lead are ones not heard before (rhythm and intervals, in any key)."""
+    for seed in range(4):
+        shapes = []
+        for p in take(seed, 60):
+            lead = sorted((e for e in p.events if e.track == "lead"), key=lambda e: e.start)
+            for bar in range(int(p.beats // 4)):
+                notes = [e for e in lead if bar * 4 <= e.start < bar * 4 + 4]
+                if notes:  # an intro has no lead
+                    rhythm = tuple(e.start % 4 for e in notes)
+                    shapes.append((rhythm, tuple(b.pitch - a.pitch for a, b in zip(notes, notes[1:]))))
+        assert len(set(shapes)) / len(shapes) > 0.6, seed  # ambient long notes allow fewer shapes
 
 
 def test_combat_changes_flavour_between_regions():
@@ -203,7 +222,12 @@ def test_twins_leave_the_stream_unchanged_and_share_its_lead(style):
         assert t.tempo == pytest.approx(p.tempo / factor(p) * factor(t))
         rhythm = [(e.start, e.duration) for e in p.events if e.track == "lead"]
         assert [(e.start, e.duration) for e in t.events if e.track == "lead"] == rhythm
-        assert any(e.track == "drone" for e in t.events) == any(e.track == "drone" for e in p.events)
+        # The region's drone, held past the phrase (a flavour's pad chords are not).
+        assert held_drone(t) == held_drone(p)
+
+
+def held_drone(p):
+    return any(e.track == "drone" and e.duration > p.beats for e in p.events)
 
 
 def fake_twinned(n_phrases=3, length=800):

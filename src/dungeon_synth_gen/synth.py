@@ -70,7 +70,7 @@ class Instrument:
 INSTRUMENTS: dict[str, Instrument] = {
     "lead": Instrument(
         "square", gain=0.28, duty=0.5, attack=0.01, decay=0.3, sustain=0.6, release=0.3,
-        lowpass=2800, vibrato_depth=0.18, vibrato_rate=5.2, vibrato_delay=0.25, reverb=0.35, echo=0.7,
+        lowpass=2800, vibrato_depth=0.18, vibrato_rate=5.2, vibrato_delay=0.25, reverb=0.35, echo=0.45,
     ),
     "arp": Instrument(
         "square", gain=0.16, pan=0.3, duty=0.25, attack=0.004, decay=0.3, sustain=0.25, release=0.2,
@@ -188,10 +188,75 @@ CHIPTRASH_INSTRUMENTS: dict[str, Instrument] = {
     "drone": replace(INSTRUMENTS["drone"], gain=0.06),
     "perc": replace(INSTRUMENTS["perc"], gain=0.5, lowpass=9000, reverb=0.25),
 }
-# Synth sets by name: each style's own, and one per combat flavour (parts.FLAVOURS).
+# Organ: a chapel organ, slow to speak, held chords on a voice that changes chord
+# without a four-second swell, and a square pedal bass.
+ORGAN_INSTRUMENTS: dict[str, Instrument] = {
+    "lead": Instrument(
+        "saw", gain=0.2, attack=0.05, decay=0.2, sustain=0.85, release=0.3, lowpass=1900,
+        vibrato_depth=0.07, vibrato_rate=5.5, vibrato_delay=0.4, detune_cents=6, reverb=0.6, echo=0.12,
+    ),
+    "arp": Instrument(
+        "square", gain=0.09, pan=0.25, attack=0.03, decay=0.3, sustain=0.7, release=0.3, lowpass=1300, reverb=0.6,
+    ),
+    "bass": Instrument(
+        "square", gain=0.24, attack=0.02, decay=0.2, sustain=0.95, release=0.2, lowpass=700, sub=0.5, reverb=0.25,
+    ),
+    "drone": Instrument(
+        "saw", gain=0.07, attack=0.6, decay=0.01, sustain=1.0, release=0.6, lowpass=900,
+        detune_cents=8, spread=0.6, reverb=0.7, linear_release=True,
+    ),
+    "perc": INSTRUMENTS["perc"],
+}
+# Harpsichord: bright plucked saws, quick to fade, close and dry.
+HARPSICHORD_INSTRUMENTS: dict[str, Instrument] = INSTRUMENTS | {
+    "lead": Instrument(
+        "saw", gain=0.22, attack=0.002, decay=0.6, sustain=0.0, release=0.25, lowpass=7000,
+        note_lowpass=2500, pluck=0.12, reverb=0.35, echo=0.2,
+    ),
+    "arp": Instrument(
+        "saw", gain=0.1, pan=-0.3, attack=0.001, decay=0.35, sustain=0.0, release=0.15, lowpass=6000,
+        note_lowpass=1800, pluck=0.08, reverb=0.35, echo=0.1,
+    ),
+    "bass": replace(INSTRUMENTS["bass"], gain=0.34, decay=0.4, sustain=0.3, release=0.15),
+    "drone": replace(INSTRUMENTS["drone"], gain=0.06),
+}
+# March: a thinner pulse lead, a clipped arp, and the drums up front.
+MARCH_INSTRUMENTS: dict[str, Instrument] = INSTRUMENTS | {
+    "lead": replace(INSTRUMENTS["lead"], duty=0.25, gain=0.24, lowpass=2600, vibrato_depth=0.12, echo=0.35),
+    "arp": replace(INSTRUMENTS["arp"], duty=0.125, decay=0.15, sustain=0.15),
+    "perc": replace(INSTRUMENTS["perc"], gain=0.5),
+}
+# Mist: a slow-swelling choir of detuned saws over a held chord, everything far away.
+MIST_INSTRUMENTS: dict[str, Instrument] = AMBIENT_INSTRUMENTS | {
+    "lead": Instrument(
+        "saw", gain=0.2, attack=0.35, decay=0.5, sustain=0.8, release=1.2, lowpass=1600,
+        vibrato_depth=0.1, vibrato_rate=4.5, vibrato_delay=0.6, detune_cents=14, voices=3, spread=0.5,
+        reverb=0.75, echo=0.3,
+    ),
+    "arp": replace(AMBIENT_INSTRUMENTS["arp"], wave="triangle", gain=0.14, decay=2.0, release=1.0, lowpass=1500, reverb=0.75),
+    "drone": Instrument(
+        "saw", gain=0.07, attack=1.5, decay=0.01, sustain=1.0, release=1.5, lowpass=600,
+        detune_cents=10, voices=3, spread=0.8, reverb=0.7, linear_release=True,
+    ),
+}
+# Music box: glassy triangle chimes, an octave up, in a small bright room.
+MUSICBOX_INSTRUMENTS: dict[str, Instrument] = AMBIENT_INSTRUMENTS | {
+    "lead": Instrument(
+        "triangle", gain=0.36, attack=0.001, decay=0.9, sustain=0.0, release=0.6, lowpass=5000, reverb=0.55, echo=0.35,
+    ),
+    "arp": replace(AMBIENT_INSTRUMENTS["arp"], wave="triangle", gain=0.1, decay=1.0, release=0.5, lowpass=3000, reverb=0.6),
+}
+# Synth sets by name: one per flavour (parts.FLAVOURS), and each style's original under its own name.
 SOUNDS: dict[str, dict[str, Instrument]] = {
     "normal": INSTRUMENTS,
     "ambient": AMBIENT_INSTRUMENTS,
+    "crypt": INSTRUMENTS,
+    "organ": ORGAN_INSTRUMENTS,
+    "harpsichord": HARPSICHORD_INSTRUMENTS,
+    "march": MARCH_INSTRUMENTS,
+    "harp": AMBIENT_INSTRUMENTS,
+    "mist": MIST_INSTRUMENTS,
+    "musicbox": MUSICBOX_INSTRUMENTS,
     "combat": COMBAT_INSTRUMENTS,
     "darksynth": COMBAT_INSTRUMENTS,
     "brut": BRUT_INSTRUMENTS,
@@ -199,7 +264,7 @@ SOUNDS: dict[str, dict[str, Instrument]] = {
     "doom": DOOM_INSTRUMENTS,
     "chiptrash": CHIPTRASH_INSTRUMENTS,
 }
-_CALM_SOUNDS = ("normal", "ambient")
+_CALM_SOUNDS = ("normal", "ambient", "crypt", "organ", "harpsichord", "march", "harp", "mist", "musicbox")
 
 
 @functools.cache
@@ -237,11 +302,12 @@ def _sound(name: str, intensity: float) -> dict[str, Instrument]:
 
 
 # Master saturation: gentle rounds off drum peaks, combat squashes harder.
-_DRIVE = {"normal": 1.6, "ambient": 1.6, "combat": 2.4, "darksynth": 2.4, "brut": 3.0, "industrial": 2.8, "doom": 2.6, "chiptrash": 2.2}
+_DRIVE = {**dict.fromkeys(_CALM_SOUNDS, 1.6), "combat": 2.4, "darksynth": 2.4, "brut": 3.0, "industrial": 2.8, "doom": 2.6, "chiptrash": 2.2}
 # Typical raw-mix peak per sound. A stream can't normalise to a peak it hasn't
 # heard yet, so it saturates against this fixed reference instead.
 _STREAM_REFERENCE = {
-    "normal": 0.85, "ambient": 0.75, "combat": 1.05, "darksynth": 1.05,
+    "normal": 0.85, "ambient": 0.75, "crypt": 0.85, "organ": 1.0, "harpsichord": 0.37, "march": 0.8,
+    "harp": 0.75, "mist": 0.6, "musicbox": 0.6, "combat": 1.05, "darksynth": 1.05,
     "brut": 1.1, "industrial": 1.2, "doom": 1.45, "chiptrash": 0.85,
 }
 

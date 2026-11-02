@@ -21,6 +21,15 @@ MOTIF_RHYTHMS: tuple[tuple[float, ...], ...] = (
     (1.5, 0.5, 1, -1),
     (0.5, 0.5, 0.5, 0.5, 2),
     (3, 0.5, 0.5),
+    (0.75, 0.25, 1, 2),
+    (1, 1, 0.5, 0.5, 1),
+    (2, 0.5, 0.5, 1),
+    (0.5, 1, 0.5, 2),
+    (1, -0.5, 0.5, 2),
+    (-1, 1, 1, 1),
+    (0.5, 0.5, 1, 0.5, 0.5, 1),
+    (1.5, 1.5, 1),
+    (1, 1.5, 0.5, 1),
 )
 # Ambient: long notes and rests, so the melody leaves room to breathe.
 AMBIENT_RHYTHMS: tuple[tuple[float, ...], ...] = (
@@ -34,7 +43,13 @@ AMBIENT_RHYTHMS: tuple[tuple[float, ...], ...] = (
     (1.5, 0.5, 2),
     (-2, 1, 1),
 )
-CADENCE_RHYTHMS: tuple[tuple[float, ...], ...] = ((4,), (1, 3), (0.5, 0.5, 3), (2, 2))
+# Every one ends on a held note; a negative value is a rest.
+CADENCE_RHYTHMS: tuple[tuple[float, ...], ...] = (
+    (4,), (1, 3), (0.5, 0.5, 3), (2, 2), (1, 1, 2), (1.5, 0.5, 2), (-1, 1, 2), (0.75, 0.25, 3), (0.5, 0.5, 1, 2), (-2, 2),
+)
+# Ways into the final note, as steps from it, last note first: straight down a scale,
+# a turn round it, a fall from a leap.
+_APPROACHES: tuple[tuple[int, ...], ...] = ((1, 2, 3), (-1, 1, 2), (1, -1, 0), (2, 1, 3), (3, 4, 2), (-1, -2, 1))
 
 _STEP_CHOICES = (-1, 1, -2, 2, 0, -3, 3)
 _STEP_WEIGHTS = (30, 30, 10, 10, 6, 4, 4)
@@ -100,34 +115,44 @@ def realize(motif: Motif, chord: int, anchor: int, bar_start: float) -> list[_No
 
 
 def cadence(rng: random.Random, chord: int, previous: int, bar_start: float, resolve: bool) -> list[_Note]:
-    """Close a phrase by stepping into a chord tone (the tonic, if ``resolve``) and holding it."""
+    """Close a phrase on a chord tone (the tonic, if ``resolve``), reached by one of ``_APPROACHES``, and hold it."""
     if resolve:
         target = min((0, 7), key=lambda d: abs(d - previous))
-        rhythm = rng.choice(CADENCE_RHYTHMS[1:])
+        rhythm = rng.choice([r for r in CADENCE_RHYTHMS if sum(1 for d in r if d > 0) > 1])
     else:
         target = nearest_chord_tone(previous, chord, -1)
         rhythm = rng.choice(CADENCE_RHYTHMS)
     direction = 1 if previous >= target else -1  # approach from the side we came from
+    approach = rng.choice(_APPROACHES)
+    sounding = sum(1 for d in rhythm if d > 0)
     notes = []
     t = 0.0
-    for i, d in enumerate(rhythm):
-        notes.append(_Note(bar_start + t, d, target + direction * (len(rhythm) - 1 - i)))
+    for d in rhythm:
+        if d < 0:
+            t -= d
+            continue
+        before = sounding - 1 - len(notes)  # notes still to come before the final one
+        offset = approach[before - 1] if before else 0
+        notes.append(_Note(bar_start + t, d, target + direction * offset))
         t += d
     return notes
 
 
 def melody_phrase(
     rng: random.Random, scale: Scale, tonic: int, chords: tuple[int, ...], motifs: tuple[Motif, ...],
-    anchor: int, resolve: bool, boost: int = 0,
+    anchor: int, resolve: bool, boost: int = 0, shifts: tuple[int, ...] = (),
 ) -> list[NoteEvent]:
     """Motif bars sequenced from the first bar's opening note, then a cadence bar.
 
+    ``shifts`` moves each bar's starting point that many scale steps from the
+    opening note, so a phrase can climb or sink instead of restating itself.
     With ``resolve`` the cadence lands on the tonic. Times are beats from the
     phrase start.
     """
     notes: list[_Note] = []
     for i, motif in enumerate(motifs):
-        bar = realize(motif, chords[i], anchor, i * BEATS_PER_BAR)
+        shift = shifts[i] if i < len(shifts) else 0
+        bar = realize(motif, chords[i], anchor + shift, i * BEATS_PER_BAR)
         if i == 0:
             anchor = bar[0].degree
         notes += bar

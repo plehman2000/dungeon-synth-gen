@@ -40,6 +40,7 @@ TEMPO_SCALE = {"normal": 1, "combat": 2, "ambient": 1}  # for the opening draw; 
 STYLES = tuple(TEMPO_SCALE)
 STYLE_WEIGHTS = {"normal": 2, "ambient": 1}
 _RHYTHMS = {"normal": melody.MOTIF_RHYTHMS, "combat": melody.MOTIF_RHYTHMS, "ambient": melody.AMBIENT_RHYTHMS}
+_EVOLVE = 0.25  # chance a region's theme grows out of the last region's instead of starting fresh
 
 
 def stream(seed: int, name: str) -> random.Random:
@@ -82,6 +83,7 @@ class Palette:
     cadence: int  # chord before the return's final i
     theme_motif: Motif
     contrast_motif: Motif
+    answer_motif: Motif  # the theme's second idea, so a theme phrase need not just restate one bar
     theme_anchor: int  # scale degree the theme starts near
     contrast_anchor: int
     groove: Groove
@@ -114,13 +116,13 @@ class Palette:
 
 
 def new_palette(rng: random.Random, scale: Scale, style: str, previous: Palette | None = None) -> Palette:
-    """Fresh material in ``scale``. Given ``previous``, the theme usually evolves from its theme."""
+    """Fresh material in ``scale``. Given ``previous``, the theme sometimes evolves from its theme."""
     theme = theory.theme_progression(rng, scale)
     contrast = theory.contrast_progression(rng, scale)
     cadence = rng.choice(theory.CADENCE_CHORDS[scale.mode])
     rhythms = _RHYTHMS[style]
-    # The theme usually evolves from the last one, unless the style changed under it.
-    if previous is not None and previous.groove.style == style and rng.random() < 0.6:
+    # The theme sometimes evolves from the last one, unless the style changed under it; mostly a region is new music.
+    if previous is not None and previous.groove.style == style and rng.random() < _EVOLVE:
         motif = previous.theme_motif
         for _ in range(2):
             _, motif = vary(motif, rng)
@@ -129,8 +131,11 @@ def new_palette(rng: random.Random, scale: Scale, style: str, previous: Palette 
     contrast_motif = melody.random_motif(rng, avoid_rhythm=motif.rhythm, rhythms=rhythms)
     theme_anchor = rng.choice((2, 4, 4, 7))
     contrast_anchor = rng.choice((7, 9))
+    answer = melody.random_motif(rng, avoid_rhythm=motif.rhythm, rhythms=rhythms)
     groove = parts.draw_groove(rng, style)  # last, so the style never shifts the melody's draws
-    return Palette(scale, theme, contrast, cadence, motif, contrast_motif, theme_anchor, contrast_anchor, groove)
+    return Palette(
+        scale, theme, contrast, cadence, motif, contrast_motif, answer, theme_anchor, contrast_anchor, groove
+    )
 
 
 class PartRngs(NamedTuple):
@@ -142,20 +147,37 @@ class PartRngs(NamedTuple):
         return cls(stream(seed, "melody"), stream(seed, "bass"))
 
 
-def _lead_plan(rng: random.Random, pal: Palette, name: str) -> tuple[tuple[Motif, ...], int, int] | None:
-    """(motifs for the first three bars, starting degree, velocity boost), or None for no lead."""
+# The first three bars of a phrase, by letter: A the theme motif, B its answer, C the contrast
+# motif; lower case is a fresh variation of that letter. A theme always opens on A, so it stays
+# recognisable; what follows changes from phrase to phrase.
+_THEME_SHAPES = ("AAa", "ABA", "ABa", "AaB", "AAB", "ABb", "AaA")
+_CONTRAST_SHAPES = ("CCc", "CcC", "Ccc", "CcB")
+# Where each bar starts, in scale steps from the phrase's opening note: level, climbing or sinking.
+_CONTOURS = ((0, 0, 0), (0, 2, 0), (0, 2, 4), (0, -2, 0), (0, 1, 2), (0, 0, -2), (0, -2, -4), (0, 3, 1))
+
+
+def _bars(shape: str, letters: dict[str, Motif], rng: random.Random) -> tuple[Motif, ...]:
+    return tuple(letters[c] if c.isupper() else vary(letters[c.upper()], rng)[1] for c in shape)
+
+
+def _lead_plan(
+    rng: random.Random, pal: Palette, name: str
+) -> tuple[tuple[Motif, ...], int, int, tuple[int, ...]] | None:
+    """(motifs for the first three bars, starting degree, velocity boost, bar shifts), or None for no lead."""
     theme, contrast = pal.theme_motif, pal.contrast_motif
     if name == "intro":
         return None
     if name == "variation":
         theme = vary(theme, rng)[1]
+    letters = {"A": theme, "B": pal.answer_motif, "C": contrast}
+    contour = rng.choice(_CONTOURS)
     if name == "contrast":
-        return (contrast, contrast, vary(contrast, rng)[1]), pal.contrast_anchor, 6
+        return _bars(rng.choice(_CONTRAST_SHAPES), letters, rng), pal.contrast_anchor, 6, contour
     if name == "development":
         developed = vary(theme, rng)[1]
         anchor = (pal.theme_anchor + pal.contrast_anchor) // 2
-        return (developed, vary(developed, rng)[1], vary(contrast, rng)[1]), anchor, 3
-    return (theme, theme, vary(theme, rng)[1]), pal.theme_anchor, 0
+        return (developed, vary(developed, rng)[1], vary(contrast, rng)[1]), anchor, 3, contour
+    return _bars(rng.choice(_THEME_SHAPES), letters, rng), pal.theme_anchor, 0, contour
 
 
 def build_phrase(
@@ -169,9 +191,10 @@ def build_phrase(
     events = []
     lead = _lead_plan(rngs.melody, pal, name)
     if lead is not None:
-        motifs, anchor, boost = lead
+        motifs, anchor, boost, shifts = lead
         lead_notes = melody.melody_phrase(
-            rngs.melody, pal.scale, pal.lead_tonic, chords, motifs, anchor, resolve=role == "return", boost=boost
+            rngs.melody, pal.scale, pal.lead_tonic + 12 * pal.groove.lead_octave, chords, motifs, anchor,
+            resolve=role == "return", boost=boost, shifts=shifts,
         )
         events += lead_notes
         if pal.groove.style == "combat" and pal.groove.intensity >= 0.75:
@@ -179,6 +202,8 @@ def build_phrase(
             events += [replace(e, pitch=e.pitch - 12, velocity=max(1, round(e.velocity * 0.6))) for e in lead_notes]
     if pal.groove.style == "combat" and pal.groove.intensity >= 0.75:
         events += parts.pad(pal.scale, pal.arp_tonic, chords)
+    elif pal.groove.pad:
+        events += parts.pad(pal.scale, pal.arp_tonic, chords, pal.groove.pad, 52)
     events += parts.arpeggio(pal.scale, pal.arp_tonic, chords, pal.groove, role, ending)
     events += parts.bassline(rngs.bass, pal.scale, pal.bass_tonic, chords, pal.groove, role, next_chord, ending)
     events += parts.percussion(pal.groove, role, len(chords), ending)

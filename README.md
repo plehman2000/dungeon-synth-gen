@@ -40,11 +40,23 @@ During `--endless`, press `c` to toggle combat on and off. The switch is instant
 
 | `--style` | Sound |
 | --- | --- |
-| `normal` | Slow dungeon crawl, 60-84 BPM, minor modes, drums only from the theme on |
-| `ambient` | Calm and open: major-side modes (ionian, lydian, mixolydian, some dorian), a soft plucked triangle lead, slow ringing arpeggios, long notes and rests, no drums |
+| `normal` | Slow dungeon crawl, about 50-100 BPM by flavour, minor modes. Each key region draws a flavour (below) |
+| `ambient` | Calm and open: major-side modes (ionian, lydian, mixolydian, some dorian), long notes and rests, no drums. Each key region draws a flavour (below) |
 | `combat` | The same seed's chords and melody, faster, with drums in every section and fills between them. Each key region draws one of five flavours (below), so a long fight keeps changing gear |
 
 Without `--style`, a fixed piece's style is drawn from its seed: normal 2/3, ambient 1/3. Combat pieces are 16 bars like the others, so they run 25-40 s.
+
+### Calm flavours
+
+| Style | Flavour | Tempo | Sound |
+| --- | --- | --- | --- |
+| normal | `crypt` (most likely) | 1x | The original: NES square lead, triangle bass, a heartbeat kick, march or war drums in the contrast |
+| normal | `organ` | 0.85x | A chapel organ: held triads under a slow-speaking lead, square pedal bass, no drums |
+| normal | `harpsichord` | 1.2x | Bright plucked saws, sixteenth-note arps over a walking bass, no drums |
+| normal | `march` | 1.1x | A thinner pulse lead over march and war drums from the intro on |
+| ambient | `harp` | 1x | Soft plucked triangles ringing over one another |
+| ambient | `mist` | 0.8x | A slow-swelling choir of detuned saws over a held open chord |
+| ambient | `musicbox` | 1x | Glassy triangle chimes an octave up |
 
 ### Combat flavours
 
@@ -56,7 +68,14 @@ Without `--style`, a fixed piece's style is drawn from its seed: normal 2/3, amb
 | `doom` | 1.5x | Half-time snare, sludge bass that drops to the seventh, fuzz-pulse lead, a cavernous room |
 | `chiptrash` | 2.25x | NES voices at a sprint: triangle gallop bass, thin pulse lead, d-beat and blast beats on the 8-bit kit |
 
-Every section draws its bass and drum patterns from its flavour's pools, and each flavour has its own synths and mastering (`parts.FLAVOURS`, `synth.SOUNDS`).
+Every section draws its bass and drum patterns from its flavour's pools, and each flavour has its own synths and mastering (`parts.FLAVOURS`, `parts.STYLE_FLAVOURS`, `synth.SOUNDS`).
+
+### Keeping it from repeating
+
+- A phrase's three motif bars follow a shape such as A-B-A or A-A'-B, where A is the theme motif, B its answer and A' a fresh variation; a theme always opens on A, so it stays recognisable (`arrange._THEME_SHAPES`).
+- Each bar can start higher or lower than the last, so a phrase climbs or sinks instead of restating itself (`arrange._CONTOURS`).
+- Phrases close on one of ten cadence rhythms and six ways into the final note (`melody.CADENCE_RHYTHMS`, `melody._APPROACHES`).
+- A new key region usually brings new motifs; only a quarter grow out of the last region's theme (`arrange._EVOLVE`).
 
 Combat is never in a major key: it plays the calm music's chords and melody on the same tonic in phrygian or harmonic minor (`theory.darken`), and its arpeggios are power chords where the third only flickers past.
 
