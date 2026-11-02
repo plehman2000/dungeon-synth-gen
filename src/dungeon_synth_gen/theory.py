@@ -8,7 +8,6 @@ Working in degrees keeps every melodic transformation diatonic for free.
 from __future__ import annotations
 
 import random
-from collections.abc import Iterable
 from dataclasses import dataclass
 
 NOTE_NAMES = ("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
@@ -57,13 +56,7 @@ CADENCE_CHORDS: dict[str, tuple[int, ...]] = {
     "lydian": (1, 4),
     "mixolydian": (6, 3),
 }
-# Combat plays every key in its grimmest neighbour on the same tonic: phrygian's
-# flat second, or harmonic minor's leading tone and menacing major V. Never major.
-_GRIM: dict[str, str] = {
-    "aeolian": "phrygian", "phrygian": "phrygian", "dorian": "phrygian", "mixolydian": "phrygian",
-    "harmonic": "harmonic", "ionian": "harmonic", "lydian": "harmonic",
-}
-# Every mode combat may end up in: never a major one.
+# Every mode combat may play in: never a major one.
 GRIM_MODES = frozenset(("phrygian", "harmonic", "aeolian", "dorian"))
 
 # Chords a phrase may pause on before the theme comes back around.
@@ -130,31 +123,12 @@ class Scale:
         return accidental + numeral + suffix
 
 
-def darken(scale: Scale, intensity: float = 0.5, chords: Iterable[int] = ()) -> Scale:
-    """The same tonic in combat's mode: the chords and melody keep their degrees, every note gets grimmer.
+def darken(scale: Scale) -> Scale:
+    """Combat's key: a minor mode stays as it is, a major one turns plain minor on the same tonic.
 
-    The mode is the first of a short list in which none of ``chords`` turns
-    diminished or augmented -- a calm progression moved into a darker mode
-    can land a tritone under the bass, which sounds broken, not grim. The list
-    follows ``intensity`` (0-1): an easy fight prefers plain minor, a grave one
-    harmonic minor, for its leading tone and dramatic major V.
+    No exotic remapping: the calm music's own notes, only never major.
     """
-    if intensity < 0.375:
-        modes = ("aeolian", "phrygian", "harmonic")
-    elif intensity >= 0.75:
-        modes = ("harmonic", _GRIM[scale.mode], "phrygian", "aeolian")
-    else:
-        modes = (_GRIM[scale.mode], "phrygian", "harmonic", "aeolian")
-    # Last resort: the key's own mode if it is a minor one (its chords were drawn to fit it), else dorian.
-    modes += (scale.mode if scale.mode in GRIM_MODES else "dorian",)
-    used = set(chords)
-
-    def clashes(mode: str) -> int:
-        candidate = Scale(scale.root, mode)
-        return sum(candidate.triad_quality(c) in ("dim", "aug") for c in used)
-
-    # The earliest mode with the fewest clashes: usually none at all.
-    return Scale(scale.root, min(modes, key=clashes))
+    return scale if scale.mode in GRIM_MODES else Scale(scale.root, "aeolian")
 
 
 def is_chord_tone(degree: int, chord: int) -> bool:

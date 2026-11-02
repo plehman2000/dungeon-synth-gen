@@ -69,7 +69,7 @@ def endless(
 
     ``intensity`` (0-1, or a function read before every phrase, so a game can
     raise it as a fight gets harder) shapes combat phrases only: sparse and
-    sombre when easy; when it matters, harmonic minor, half-time drums and
+    sombre when easy; when it matters, half-time drums and
     crashes, power-chord pads and a lead doubled an octave down.
     """
     read = intensity if callable(intensity) else (lambda: intensity)

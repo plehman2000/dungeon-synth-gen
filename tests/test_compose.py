@@ -54,8 +54,7 @@ def test_contrast_section_has_drums():
 def test_combat_is_the_same_piece_at_its_flavours_tempo(seed):
     normal, combat = compose(seed), compose(seed, style="combat")
     assert combat.tempo == pytest.approx(normal.tempo / FLAVOURS[normal.sound].tempo * FLAVOURS[combat.sound].tempo)
-    chords = [c for s in normal.sections for c in s.chords]
-    assert combat.scale == darken(normal.scale, 0.5, chords)
+    assert combat.scale == darken(normal.scale)
     assert [(s.name, s.start_bar, len(s.chords)) for s in combat.sections] == [
         (s.name, s.start_bar, len(s.chords)) for s in normal.sections
     ]

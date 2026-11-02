@@ -77,7 +77,7 @@ Every section draws its bass and drum patterns from its flavour's pools, and eac
 - Phrases close on one of ten cadence rhythms and six ways into the final note (`melody.CADENCE_RHYTHMS`, `melody._APPROACHES`).
 - A new key region usually brings new motifs; only a quarter grow out of the last region's theme (`arrange._EVOLVE`).
 
-Combat is never in a major key: it plays the calm music's chords and melody on the same tonic in phrygian or harmonic minor (`theory.darken`), and its arpeggios are power chords where the third only flickers past.
+Combat is never in a major key: it plays the calm music's chords and melody in the key's own minor mode, or plain minor (aeolian) on the same tonic if the key was major (`theory.darken`), and its arpeggios are power chords where the third only flickers past.
 
 ### Intensity
 
@@ -85,7 +85,6 @@ Combat is never in a major key: it plays the calm music's chords and melody on t
 
 | | 0 | 0.5 (default) | 1 |
 | --- | --- | --- | --- |
-| Mode | plain minor | phrygian / harmonic minor | harmonic minor where it fits |
 | Drums | downbeats and snares | the pattern as drawn | a crash on every bar from 0.75; half-time anthem at 1 |
 | Bass and arps | thinned to eighths | as drawn | bass as drawn; arps slow to ringing eighths |
 | Pads and lead | | | power-chord pads; lead doubled an octave down |

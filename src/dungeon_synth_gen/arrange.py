@@ -219,15 +219,14 @@ def in_combat(
 ) -> Palette:
     """The palette as a fight this hard plays it; calm styles pass through.
 
-    Combat keeps the palette's degrees in a grimmer mode that every one of
-    ``chords`` (all the bars it will play in this key) can stand, unless the
-    mode is pinned, and reshapes its groove.
+    Combat keeps the palette's degrees, in plain minor if the key was major
+    (unless the mode is pinned), and reshapes its groove. ``playable`` then swaps
+    out any of ``chords`` that minor turned diminished.
     """
     if style != "combat":
         return pal
     x = parts.level(intensity)
-    used = [c for bars in chords for c in bars]
-    scale = pal.scale if mode is not None else theory.darken(pal.scale, x, used)
+    scale = pal.scale if mode is not None else theory.darken(pal.scale)
     return replace(pal, scale=scale, groove=parts.intensify(pal.groove, x))
 
 
