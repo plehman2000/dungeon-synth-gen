@@ -117,12 +117,30 @@ DRUM_PATTERNS: dict[str, tuple[tuple[int, int, int], ...]] = {
     # The gravest moment of a fight: half time, every hit given room to land.
     "anthem": ((0, KICK, 124), (6, KICK, 88), (8, SNARE, 126), (10, KICK, 92), (14, LOW_TOM, 96)),
 }
-# Replace the second half of a section's last bar.
-_FILLS = {
-    "normal": ((8, MID_TOM, 80), (10, MID_TOM, 85), (12, LOW_TOM, 95), (13, LOW_TOM, 100), (14, LOW_TOM, 105), (15, LOW_TOM, 110)),
+# Replace the second half of a section's last bar. Combat draws one per phrase, and None
+# (no fill: the groove plays straight through) is one of the draws.
+_FILLS: dict[str, tuple[tuple[tuple[int, int, int], ...] | None, ...]] = {
+    "normal": (
+        ((8, MID_TOM, 80), (10, MID_TOM, 85), (12, LOW_TOM, 95), (13, LOW_TOM, 100), (14, LOW_TOM, 105), (15, LOW_TOM, 110)),
+    ),
     "combat": (
-        (8, SNARE, 80), (9, SNARE, 70), (10, SNARE, 90), (11, SNARE, 80),
-        (12, MID_TOM, 100), (13, MID_TOM, 100), (14, LOW_TOM, 110), (15, LOW_TOM, 115),
+        # Snare roll into the toms.
+        ((8, SNARE, 80), (9, SNARE, 70), (10, SNARE, 90), (11, SNARE, 80),
+         (12, MID_TOM, 100), (13, MID_TOM, 100), (14, LOW_TOM, 110), (15, LOW_TOM, 115)),
+        # Down the toms.
+        ((8, MID_TOM, 105), (9, MID_TOM, 90), (10, MID_TOM, 100), (12, LOW_TOM, 110), (13, LOW_TOM, 95),
+         (14, LOW_TOM, 115), (15, KICK, 100)),
+        # Unison stabs.
+        ((8, KICK, 122), (8, SNARE, 118), (11, KICK, 110), (12, KICK, 122), (12, SNARE, 120), (14, SNARE, 100),
+         (15, SNARE, 110)),
+        # A snare build in sixteenths.
+        tuple((i, SNARE, 70 + 7 * (i - 8)) for i in range(8, 16)),
+        # One hit, then the floor drops out.
+        ((8, KICK, 124), (8, CRASH, 100)),
+        # Kicks answering the snare.
+        ((8, KICK, 115), (10, KICK, 110), (11, KICK, 100), (12, SNARE, 120), (13, KICK, 100), (14, SNARE, 110),
+         (15, SNARE, 120)),
+        None,
     ),
 }
 # Per style: roles that end on a fill, and roles that open on a crash. The patterns come from the flavour.
@@ -372,6 +390,11 @@ def arpeggio(scale: Scale, tonic: int, chords: tuple[int, ...], groove: Groove, 
     return events
 
 
+def _fill(style: str, rng: random.Random | None) -> tuple[tuple[int, int, int], ...] | None:
+    fills = _FILLS[style]
+    return fills[0] if rng is None or len(fills) == 1 else rng.choice(fills)
+
+
 def _drums_at(pattern: tuple[tuple[int, int, int], ...], intensity: float) -> tuple[tuple[int, int, int], ...]:
     """A bar pattern for a fight this hard: only the downbeats and snares when easy, the half-time anthem at the top."""
     if intensity <= 0.25:
@@ -381,7 +404,10 @@ def _drums_at(pattern: tuple[tuple[int, int, int], ...], intensity: float) -> tu
     return pattern
 
 
-def percussion(groove: Groove, role: str, bars: int, ending: bool = False) -> list[NoteEvent]:
+def percussion(
+    groove: Groove, role: str, bars: int, ending: bool = False, rng: random.Random | None = None
+) -> list[NoteEvent]:
+    """Drums for one phrase; ``rng`` draws which fill closes it, where the style has more than one."""
     if role not in groove.drums:
         return []
     filled, crashed = _DRUM_ACCENTS[groove.style]
@@ -392,8 +418,8 @@ def percussion(groove: Groove, role: str, bars: int, ending: bool = False) -> li
         pattern = base
         if ending and bar == bars - 1:
             pattern = _ENDING_HIT
-        elif role in filled and bar == bars - 1:
-            pattern = tuple(p for p in pattern if p[0] < 8) + _FILLS[groove.style]
+        elif role in filled and bar == bars - 1 and (fill := _fill(groove.style, rng)) is not None:
+            pattern = tuple(p for p in pattern if p[0] < 8) + fill
             if grave:
                 pattern += ((0, CRASH, 95),)
         elif (bar == 0 and role in crashed) or grave:

@@ -206,7 +206,7 @@ def build_phrase(
         events += parts.pad(pal.scale, pal.arp_tonic, chords, pal.groove.pad, 52)
     events += parts.arpeggio(pal.scale, pal.arp_tonic, chords, pal.groove, role, ending)
     events += parts.bassline(rngs.bass, pal.scale, pal.bass_tonic, chords, pal.groove, role, next_chord, ending)
-    events += parts.percussion(pal.groove, role, len(chords), ending)
+    events += parts.percussion(pal.groove, role, len(chords), ending, rngs.bass)
     return events
 
 

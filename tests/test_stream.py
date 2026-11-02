@@ -134,6 +134,20 @@ def test_lead_bars_rarely_repeat():
         assert len(set(shapes)) / len(shapes) > 0.6, seed  # ambient long notes allow fewer shapes
 
 
+def test_combat_fills_vary():
+    """One groove, many phrases: the fill closing each is not the same every time."""
+    import random
+
+    from dungeon_synth_gen.parts import draw_groove, percussion
+
+    groove = draw_groove(random.Random(1), "combat")
+    rng = random.Random(2)
+    endings = {
+        tuple((e.start, e.pitch) for e in percussion(groove, "theme", 4, rng=rng) if e.start >= 14) for _ in range(30)
+    }
+    assert len(endings) >= 5
+
+
 def test_combat_changes_flavour_between_regions():
     sounds = {p.sound for seed in range(4) for p in take(seed, 80, style="combat")}
     assert len(sounds) >= 4 and sounds <= set(FLAVOURS)

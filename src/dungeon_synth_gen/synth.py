@@ -69,8 +69,8 @@ class Instrument:
 
 INSTRUMENTS: dict[str, Instrument] = {
     "lead": Instrument(
-        "square", gain=0.28, duty=0.5, attack=0.01, decay=0.3, sustain=0.6, release=0.3,
-        lowpass=2800, vibrato_depth=0.18, vibrato_rate=5.2, vibrato_delay=0.25, reverb=0.35, echo=0.45,
+        "square", gain=0.28, duty=0.5, attack=0.025, decay=0.3, sustain=0.6, release=0.3,
+        lowpass=1800, vibrato_depth=0.18, vibrato_rate=5.2, vibrato_delay=0.25, reverb=0.5, echo=0.45,
     ),
     "arp": Instrument(
         "square", gain=0.16, pan=0.3, duty=0.25, attack=0.004, decay=0.3, sustain=0.25, release=0.2,
@@ -90,9 +90,9 @@ INSTRUMENTS: dict[str, Instrument] = {
 # clean sub, driven saw plucks, and a wide pad pumping hard against the kick.
 COMBAT_INSTRUMENTS: dict[str, Instrument] = {
     "lead": Instrument(
-        "saw", gain=0.28, attack=0.005, decay=0.25, sustain=0.7, release=0.18, lowpass=5500,
+        "saw", gain=0.28, attack=0.008, decay=0.25, sustain=0.7, release=0.18, lowpass=3200,
         vibrato_depth=0.08, vibrato_rate=5.5, vibrato_delay=0.3, detune_cents=16, voices=5, spread=0.5,
-        note_lowpass=3000, pluck=0.2, drive=2.0, duck=0.25, reverb=0.25, echo=0.3,
+        note_lowpass=1800, pluck=0.2, drive=1.6, duck=0.25, reverb=0.4, echo=0.3,
     ),
     "arp": Instrument(
         "saw", gain=0.15, pan=0.3, attack=0.002, decay=0.12, sustain=0.35, release=0.08, lowpass=7000,
@@ -127,9 +127,9 @@ AMBIENT_INSTRUMENTS: dict[str, Instrument] = INSTRUMENTS | {
 # every beat, and short driven plucks ricocheting through the echo.
 BRUT_INSTRUMENTS: dict[str, Instrument] = {
     "lead": Instrument(
-        "saw", gain=0.26, attack=0.004, decay=0.2, sustain=0.75, release=0.15, lowpass=6500,
+        "saw", gain=0.26, attack=0.006, decay=0.2, sustain=0.75, release=0.15, lowpass=3500,
         vibrato_depth=0.1, vibrato_rate=6.0, vibrato_delay=0.25, detune_cents=24, voices=7, spread=0.7,
-        note_lowpass=2200, pluck=0.3, drive=4.0, duck=0.3, reverb=0.25, echo=0.35,
+        note_lowpass=1500, pluck=0.3, drive=2.5, duck=0.3, reverb=0.4, echo=0.35,
     ),
     "arp": Instrument(
         "saw", gain=0.13, pan=-0.25, attack=0.001, decay=0.08, sustain=0.3, release=0.05, lowpass=8000,
@@ -151,7 +151,7 @@ INDUSTRIAL_INSTRUMENTS: dict[str, Instrument] = {
     ),
     "arp": Instrument(
         "square", gain=0.11, pan=0.35, duty=0.125, attack=0.001, decay=0.06, sustain=0.1, release=0.04,
-        lowpass=6000, drive=2.0, duck=0.5, reverb=0.25, echo=0.5,
+        lowpass=3500, drive=2.0, duck=0.5, reverb=0.3, echo=0.5,
     ),
     "bass": Instrument(
         "square", gain=0.25, duty=0.3, attack=0.002, decay=0.08, sustain=0.7, release=0.03, lowpass=3000,
@@ -183,10 +183,10 @@ DOOM_INSTRUMENTS: dict[str, Instrument] = {
 # and the 8-bit kit hit hard.
 CHIPTRASH_INSTRUMENTS: dict[str, Instrument] = {
     "lead": replace(
-        INSTRUMENTS["lead"], duty=0.125, gain=0.25, decay=0.15, sustain=0.7, release=0.1, lowpass=6000,
-        vibrato_depth=0.12, vibrato_rate=6.5, drive=1.5, duck=0.2, reverb=0.2, echo=0.3,
+        INSTRUMENTS["lead"], duty=0.25, gain=0.25, decay=0.15, sustain=0.7, release=0.1, lowpass=3000,
+        vibrato_depth=0.12, vibrato_rate=6.5, drive=1.5, duck=0.2, reverb=0.35, echo=0.3,
     ),
-    "arp": replace(INSTRUMENTS["arp"], gain=0.13, decay=0.08, sustain=0.2, release=0.05, lowpass=5000, echo=0.25),
+    "arp": replace(INSTRUMENTS["arp"], gain=0.13, decay=0.08, sustain=0.2, release=0.05, lowpass=3500, echo=0.25),
     "bass": replace(INSTRUMENTS["bass"], gain=0.42, decay=0.1, sustain=0.9, release=0.03, lowpass=4000, duck=0.3),
     "drone": replace(INSTRUMENTS["drone"], gain=0.06),
     "perc": replace(INSTRUMENTS["perc"], gain=0.5, lowpass=9000, reverb=0.25),
@@ -195,8 +195,8 @@ CHIPTRASH_INSTRUMENTS: dict[str, Instrument] = {
 # without a four-second swell, and a square pedal bass.
 ORGAN_INSTRUMENTS: dict[str, Instrument] = {
     "lead": Instrument(
-        "saw", gain=0.2, attack=0.05, decay=0.2, sustain=0.85, release=0.3, lowpass=1900,
-        vibrato_depth=0.07, vibrato_rate=5.5, vibrato_delay=0.4, detune_cents=6, reverb=0.6, echo=0.12,
+        "saw", gain=0.2, attack=0.05, decay=0.2, sustain=0.85, release=0.3, lowpass=1400,
+        vibrato_depth=0.07, vibrato_rate=5.5, vibrato_delay=0.4, detune_cents=6, reverb=0.7, echo=0.12,
     ),
     "arp": Instrument(
         "square", gain=0.09, pan=0.25, attack=0.03, decay=0.3, sustain=0.7, release=0.3, lowpass=1300, reverb=0.6,
@@ -213,19 +213,19 @@ ORGAN_INSTRUMENTS: dict[str, Instrument] = {
 # Harpsichord: bright plucked saws, quick to fade, close and dry.
 HARPSICHORD_INSTRUMENTS: dict[str, Instrument] = INSTRUMENTS | {
     "lead": Instrument(
-        "saw", gain=0.22, attack=0.002, decay=0.6, sustain=0.0, release=0.25, lowpass=7000,
-        note_lowpass=2500, pluck=0.12, reverb=0.35, echo=0.2,
+        "saw", gain=0.22, attack=0.004, decay=0.6, sustain=0.0, release=0.25, lowpass=2500,
+        note_lowpass=1400, pluck=0.12, reverb=0.5, echo=0.2,
     ),
     "arp": Instrument(
-        "saw", gain=0.1, pan=-0.3, attack=0.001, decay=0.35, sustain=0.0, release=0.15, lowpass=6000,
-        note_lowpass=1800, pluck=0.08, reverb=0.35, echo=0.1,
+        "saw", gain=0.1, pan=-0.3, attack=0.002, decay=0.35, sustain=0.0, release=0.15, lowpass=3000,
+        note_lowpass=1100, pluck=0.08, reverb=0.45, echo=0.1,
     ),
     "bass": replace(INSTRUMENTS["bass"], wave="sine", gain=0.09, decay=0.4, sustain=0.3, release=0.15, drive=1.2),
     "drone": replace(INSTRUMENTS["drone"], gain=0.06),
 }
 # March: a thinner pulse lead, a clipped arp, and the drums up front.
 MARCH_INSTRUMENTS: dict[str, Instrument] = INSTRUMENTS | {
-    "lead": replace(INSTRUMENTS["lead"], duty=0.25, gain=0.24, lowpass=2600, vibrato_depth=0.12, echo=0.35),
+    "lead": replace(INSTRUMENTS["lead"], duty=0.25, gain=0.24, lowpass=1700, vibrato_depth=0.12, echo=0.35),
     "arp": replace(INSTRUMENTS["arp"], duty=0.125, decay=0.15, sustain=0.15),
     "perc": replace(INSTRUMENTS["perc"], gain=0.5),
 }
@@ -245,7 +245,7 @@ MIST_INSTRUMENTS: dict[str, Instrument] = AMBIENT_INSTRUMENTS | {
 # Music box: glassy triangle chimes, an octave up, in a small bright room.
 MUSICBOX_INSTRUMENTS: dict[str, Instrument] = AMBIENT_INSTRUMENTS | {
     "lead": Instrument(
-        "triangle", gain=0.36, attack=0.001, decay=0.9, sustain=0.0, release=0.6, lowpass=5000, reverb=0.55, echo=0.35,
+        "triangle", gain=0.36, attack=0.002, decay=0.9, sustain=0.0, release=0.6, lowpass=3000, reverb=0.65, echo=0.35,
     ),
     "arp": replace(AMBIENT_INSTRUMENTS["arp"], wave="triangle", gain=0.1, decay=1.0, release=0.5, lowpass=3000, reverb=0.6),
 }
