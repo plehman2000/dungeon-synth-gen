@@ -39,9 +39,20 @@ TEMPO_RANGE = (60, 84)
 TEMPO_SCALE = {"normal": 1, "combat": 2, "ambient": 1}  # for the opening draw; each groove then sets its own
 STYLES = tuple(TEMPO_SCALE)
 STYLE_WEIGHTS = {"normal": 3, "ambient": 1}
-_RHYTHMS = {"normal": melody.MOTIF_RHYTHMS, "combat": melody.MOTIF_RHYTHMS, "ambient": melody.AMBIENT_RHYTHMS}
+_RHYTHMS = {"normal": melody.DUNGEON_RHYTHMS, "combat": melody.DUNGEON_RHYTHMS, "ambient": melody.AMBIENT_RHYTHMS}  # combat is the dungeon piece, faster
+_LEAD_FLOOR = {"normal": 55, "combat": 55, "ambient": 60}  # MIDI note the lead tonic sits at or above: dungeon leads sit a 4th lower
 _EVOLVE = 0.6  # chance a region's theme grows out of the last region's instead of starting fresh
 _KEEP_FLAVOUR = 0.6  # chance a region keeps the last region's flavour (its synths and patterns), when the style stays
+_REHARMONISE = 0.6  # chance a variation swaps one of the theme's chords for a neighbour
+# Chance a section brings in the counter voice under the lead; never in ambient, which keeps its one line.
+_COUNTER_ODDS = {"theme": 0.2, "variation": 0.5, "contrast": 0.35, "development": 0.6, "return": 0.5}
+# How a theme or development phrase is scored, weighted: everything, the arp held back for two bars,
+# the arp left out, or (combat) a breakdown with only downbeat kicks for two bars.
+_TEXTURES = {
+    "normal": {"full": 4, "arp_enters": 1, "bare": 1},
+    "combat": {"full": 4, "arp_enters": 1, "breakdown": 1.5},
+    "ambient": {"full": 1},
+}
 
 
 def stream(seed: int, name: str) -> random.Random:
@@ -88,10 +99,11 @@ class Palette:
     theme_anchor: int  # scale degree the theme starts near
     contrast_anchor: int
     groove: Groove
+    lead_floor: int = 60  # the lead tonic is the lowest tonic at or above this MIDI note; kept by the combat twin
 
     @property
     def lead_tonic(self) -> int:
-        return theory.place(self.scale.root, 60)
+        return theory.place(self.scale.root, self.lead_floor)
 
     @property
     def arp_tonic(self) -> int:
@@ -113,7 +125,21 @@ class Palette:
             return self.contrast
         if role == "return":
             return (self.theme[0], self.theme[1], self.cadence, 0)
+        if name == "variation" and rng.random() < _REHARMONISE:
+            return self._reharmonised(rng)
         return self.theme
+
+    def _reharmonised(self, rng: random.Random) -> tuple[int, ...]:
+        """The theme with its second or third chord swapped for a neighbour sharing two of its notes."""
+        bar = rng.choice((1, 2))
+        chord, around = self.theme[bar], (self.theme[bar - 1], self.theme[bar + 1])
+        options = [
+            c % 7 for c in (chord + 2, chord - 2)
+            if self.scale.triad_quality(c % 7) in ("major", "minor") and c % 7 not in around
+        ]
+        if not options:
+            return self.theme
+        return self.theme[:bar] + (rng.choice(options),) + self.theme[bar + 1 :]
 
 
 def new_palette(rng: random.Random, scale: Scale, style: str, previous: Palette | None = None) -> Palette:
@@ -137,7 +163,8 @@ def new_palette(rng: random.Random, scale: Scale, style: str, previous: Palette 
     same_sound = previous is not None and previous.groove.style == style and rng.random() < _KEEP_FLAVOUR
     groove = parts.draw_groove(rng, style, previous.groove.sound if same_sound else None)  # last, so the style never shifts the melody's draws
     return Palette(
-        scale, theme, contrast, cadence, motif, contrast_motif, answer, theme_anchor, contrast_anchor, groove
+        scale, theme, contrast, cadence, motif, contrast_motif, answer, theme_anchor, contrast_anchor, groove,
+        _LEAD_FLOOR[style],
     )
 
 
@@ -191,26 +218,43 @@ def build_phrase(
     ``next_chord`` opens the following phrase; ``ending`` closes a fixed piece.
     """
     role = ROLES[name]
+    style = pal.groove.style
     events = []
     lead = _lead_plan(rngs.melody, pal, name)
     if lead is not None:
         motifs, anchor, boost, shifts = lead
-        lead_notes = melody.melody_phrase(
+        # Drawn the same way in every style, so a phrase and its twin keep one melody.
+        roll, kind = rngs.melody.random(), rngs.melody.choice(melody.COUNTERS)
+        counter = kind if style != "ambient" and roll < _COUNTER_ODDS.get(name, 0) else None
+        lines = melody.melody_phrase(
             rngs.melody, pal.scale, pal.lead_tonic + 12 * pal.groove.lead_octave, chords, motifs, anchor,
-            resolve=role == "return", boost=boost, shifts=shifts,
+            resolve=role == "return", boost=boost, shifts=shifts, counter=counter,
         )
-        events += lead_notes
-        if pal.groove.style == "combat" and pal.groove.intensity >= 0.75:
+        events += lines
+        if style == "combat" and pal.groove.intensity >= 0.75:
             # A grave fight doubles the lead an octave down: weight under the line, not a scream over it.
-            events += [replace(e, pitch=e.pitch - 12, velocity=max(1, round(e.velocity * 0.6))) for e in lead_notes]
-    if pal.groove.style == "combat" and pal.groove.intensity >= 0.75:
+            events += [
+                replace(e, pitch=e.pitch - 12, velocity=max(1, round(e.velocity * 0.6))) for e in lines if e.track == "lead"
+            ]
+    if style == "combat" and pal.groove.intensity >= 0.75:
         events += parts.pad(pal.scale, pal.arp_tonic, chords)
     elif pal.groove.pad:
         events += parts.pad(pal.scale, pal.arp_tonic, chords, pal.groove.pad, 52)
-    events += parts.arpeggio(pal.scale, pal.arp_tonic, chords, pal.groove, role, ending)
+    textures = _TEXTURES[style]
+    texture = rngs.bass.choices(list(textures), weights=list(textures.values()))[0]
+    if ending or name not in ("theme", "variation", "development"):
+        texture = "full"
+    arp = parts.arpeggio(pal.scale, pal.arp_tonic, chords, pal.groove, role, ending, rngs.bass)
+    if texture == "bare":
+        arp = []
+    elif texture == "arp_enters":
+        arp = [e for e in arp if e.start >= 2 * BEATS_PER_BAR]
+    events += arp
     events += parts.bassline(rngs.bass, pal.scale, pal.bass_tonic, chords, pal.groove, role, next_chord, ending)
-    events += parts.percussion(pal.groove, role, len(chords), ending, rngs.bass)
-    return events
+    drums = parts.percussion(pal.groove, role, len(chords), ending, rngs.bass)
+    if texture == "breakdown":
+        drums = [e for e in drums if e.start >= 2 * BEATS_PER_BAR or (e.start % BEATS_PER_BAR == 0 and e.pitch != parts.SNARE)]
+    return events + drums
 
 
 def event_order(e: NoteEvent) -> tuple[float, str, int]:

@@ -75,7 +75,11 @@ Every section draws its bass and drum patterns from its flavour's pools, and eac
 - A phrase's three motif bars follow a shape such as A-B-A or A-A'-B, where A is the theme motif, B its answer and A' a fresh variation; a theme always opens on A, so it stays recognisable (`arrange._THEME_SHAPES`).
 - Each bar can start higher or lower than the last, so a phrase climbs or sinks instead of restating itself (`arrange._CONTOURS`).
 - Phrases close on one of ten cadence rhythms and six ways into the final note (`melody.CADENCE_RHYTHMS`, `melody._APPROACHES`).
-- A new key region usually brings new motifs; only a quarter grow out of the last region's theme (`arrange._EVOLVE`).
+- A new key region often brings new motifs; the rest grow out of the last region's theme (`arrange._EVOLVE`).
+- A counter voice comes in under the lead in some phrases, never in ambient: thirds and sixths under held notes, or a slow line moving against the lead, always on chord tones clear of the drone (`melody.COUNTERS`, `arrange._COUNTER_ODDS`).
+- Phrases change texture: the arp held back for two bars or left out, or in combat a two-bar breakdown on downbeat kicks (`arrange._TEXTURES`).
+- Variations often swap one of the theme's chords for a neighbour (`arrange._REHARMONISE`).
+- Inside a phrase, bars trade between two arp patterns (some with gaps), every second bar of drums adds an answering hit, and some phrases' bass runs into the next phrase's root (`parts._ARP_SHAPES`, `parts._VARIATIONS`, `parts._turnaround`).
 
 Combat is never in a major key: it plays the calm music's chords and melody in the key's own minor mode, or plain minor (aeolian) on the same tonic if the key was major (`theory.darken`), and its arpeggios are power chords where the third only flickers past.
 

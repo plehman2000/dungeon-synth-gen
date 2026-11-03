@@ -6,8 +6,8 @@ from pathlib import Path
 
 from dungeon_synth_gen.events import Composition
 
-CHANNELS = {"lead": 0, "arp": 1, "bass": 2, "drone": 3, "perc": 9}
-PROGRAMS = {"lead": 80, "arp": 80, "bass": 38, "drone": 89}  # GM: square lead, synth bass, warm pad
+CHANNELS = {"lead": 0, "counter": 4, "arp": 1, "bass": 2, "drone": 3, "perc": 9}
+PROGRAMS = {"lead": 80, "counter": 80, "arp": 80, "bass": 38, "drone": 89}  # GM: square lead, synth bass, warm pad
 
 
 def _vlq(n: int) -> bytes:

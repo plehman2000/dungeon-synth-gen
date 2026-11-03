@@ -70,7 +70,7 @@ class Instrument:
 INSTRUMENTS: dict[str, Instrument] = {
     "lead": Instrument(
         "square", gain=0.28, duty=0.5, attack=0.025, decay=0.3, sustain=0.6, release=0.3,
-        lowpass=1800, vibrato_depth=0.18, vibrato_rate=5.2, vibrato_delay=0.25, reverb=0.5, echo=0.45,
+        lowpass=1500, vibrato_depth=0.09, vibrato_rate=5.0, vibrato_delay=0.35, reverb=0.5, echo=0.2,
     ),
     "arp": Instrument(
         "square", gain=0.16, pan=0.3, duty=0.25, attack=0.004, decay=0.3, sustain=0.25, release=0.2,
@@ -225,7 +225,7 @@ HARPSICHORD_INSTRUMENTS: dict[str, Instrument] = INSTRUMENTS | {
 }
 # March: a thinner pulse lead, a clipped arp, and the drums up front.
 MARCH_INSTRUMENTS: dict[str, Instrument] = INSTRUMENTS | {
-    "lead": replace(INSTRUMENTS["lead"], duty=0.25, gain=0.24, lowpass=1700, vibrato_depth=0.12, echo=0.35),
+    "lead": replace(INSTRUMENTS["lead"], duty=0.25, gain=0.24, lowpass=1500, vibrato_depth=0.06, echo=0.2),
     "arp": replace(INSTRUMENTS["arp"], duty=0.125, decay=0.15, sustain=0.15),
     "perc": replace(INSTRUMENTS["perc"], gain=0.5),
 }
@@ -273,6 +273,17 @@ SOUNDS.update({
     name: SOUNDS[name] | {"lead": replace(SOUNDS[name]["lead"], gain=SOUNDS[name]["lead"].gain * _CALM_LEAD_TRIM)}
     for name in _CALM_SOUNDS
 })
+
+
+def _counter_voice(lead: Instrument) -> Instrument:
+    """The second melodic voice: the lead's own synth, quieter, steadier, panned to the other side."""
+    return replace(
+        lead, gain=lead.gain * 0.5, pan=-0.25 if lead.pan == 0 else -lead.pan, vibrato_depth=lead.vibrato_depth * 0.5,
+        spread=lead.spread * 0.5, echo=lead.echo * 0.5,
+    )
+
+
+SOUNDS.update({name: sound | {"counter": _counter_voice(sound["lead"])} for name, sound in SOUNDS.items()})
 
 
 @functools.cache

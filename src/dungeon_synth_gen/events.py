@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from dungeon_synth_gen.theory import Scale
 
 BEATS_PER_BAR = 4
-TRACKS = ("lead", "arp", "bass", "drone", "perc")
+TRACKS = ("lead", "counter", "arp", "bass", "drone", "perc")
 
 
 @dataclass(frozen=True, slots=True)

@@ -5,15 +5,18 @@ import pytest
 
 from dungeon_synth_gen.arrange import STYLES, compose
 from dungeon_synth_gen.cli import main
+from dungeon_synth_gen.events import TRACKS
 from dungeon_synth_gen.midi import to_midi
 from dungeon_synth_gen.synth import SAMPLE_RATE, render
 
 
 def test_midi_has_header_and_one_track_per_part():
-    data = to_midi(compose(3, style="combat"))  # every combat flavour has drums
+    comp = compose(3, style="combat")  # every combat flavour has drums
+    data = to_midi(comp)
+    parts = 1 + sum(1 for name in TRACKS if comp.track(name))  # conductor + every part that plays
     assert data[:4] == b"MThd"
-    assert int.from_bytes(data[10:12], "big") == 6  # conductor + lead, arp, bass, drone, perc
-    assert data.count(b"MTrk") == 6
+    assert int.from_bytes(data[10:12], "big") == parts >= 6
+    assert data.count(b"MTrk") == parts
 
 
 @pytest.mark.parametrize("style", STYLES)

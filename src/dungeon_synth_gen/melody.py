@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from dungeon_synth_gen.events import BEATS_PER_BAR, NoteEvent
-from dungeon_synth_gen.theory import Scale, nearest_chord_tone
+from dungeon_synth_gen.theory import Scale, is_chord_tone, nearest_chord_tone
 from dungeon_synth_gen.variation import Motif
 
 MOTIF_RHYTHMS: tuple[tuple[float, ...], ...] = (
@@ -33,15 +33,30 @@ MOTIF_RHYTHMS: tuple[tuple[float, ...], ...] = (
 )
 # Ambient: long notes and rests, so the melody leaves room to breathe.
 AMBIENT_RHYTHMS: tuple[tuple[float, ...], ...] = (
+    (4,),
+    (4,),
     (2, 2),
     (3, 1),
     (1, 3),
+    (-1, 3),
+    (-2, 2),
+    (2, -1, 1),
+    (2, 1, 1),
+    (-1, 1, 2),
+)
+# Dungeon (normal): heavy and unhurried. Halves, quarters and held notes; no skipping dotted figures.
+DUNGEON_RHYTHMS: tuple[tuple[float, ...], ...] = (
+    (2, 2),
+    (3, 1),
+    (4,),
     (2, 1, 1),
     (1, 1, 2),
-    (-1, 1, 2),
+    (1, 3),
     (2, -1, 1),
-    (1.5, 0.5, 2),
-    (-2, 1, 1),
+    (-1, 1, 2),
+    (1, 1, 1, 1),
+    (3, 0.5, 0.5),
+    (2, 0.5, 0.5, 1),
 )
 # Every one ends on a held note; a negative value is a rest.
 CADENCE_RHYTHMS: tuple[tuple[float, ...], ...] = (
@@ -147,16 +162,134 @@ def cadence(rng: random.Random, chord: int, previous: int, bar_start: float, res
     return notes
 
 
+_HARSH = (1, 6, 11)  # semitones from a drone note: a minor second, a tritone, a major seventh
+
+
+def _clashes(scale: Scale, degree: int) -> bool:
+    """True if ``degree`` sits a semitone or a tritone from the drone (tonic and fifth, held under every region)."""
+    pitch = scale.pitch(degree, 0)
+    return any((pitch - scale.pitch(d, 0)) % 12 in _HARSH for d in (0, 4))
+
+
+def _clear_the_drone(notes: list[_Note], scale: Scale, chords: tuple[int, ...]) -> None:
+    """Move held or accented notes that grind against the drone to the nearest chord tone that doesn't.
+
+    Over Phrygian's bII, for instance, the lead holds its fifth instead of its root:
+    the dark chord stays in the harmony, and the b2 and b5 only pass by in short notes.
+    """
+    for i, note in enumerate(notes):
+        accented = note.start % 2 == 0 or note.duration >= 0.9
+        if not accented or not _clashes(scale, note.degree):
+            continue
+        chord = chords[min(int(note.start // BEATS_PER_BAR), len(chords) - 1)]
+        options = [d for d in range(LOW, HIGH + 1) if is_chord_tone(d, chord) and not _clashes(scale, d)]
+        if options:
+            notes[i] = replace(note, degree=min(options, key=lambda d: (abs(d - note.degree), d)))
+
+
+def _smooth_tritones(notes: list[_Note], scale: Scale, chords: tuple[int, ...]) -> None:
+    """Re-pick any note a tritone from the one before it, a step or two over.
+
+    A held or accented note stays a chord tone, and the phrase's last note stays
+    where the cadence put it (the note before it moves instead).
+    """
+    def semitones(a: int, b: int) -> int:
+        return abs(scale.pitch(a, 0) - scale.pitch(b, 0))
+
+    for i in range(1, len(notes)):
+        if semitones(notes[i].degree, notes[i - 1].degree) != 6:
+            continue
+        fix = i if i < len(notes) - 1 else i - 1
+        if fix == 0:
+            continue
+        note, before = notes[fix], notes[fix - 1].degree
+        after = notes[fix + 1].degree if fix + 1 < len(notes) else None
+        chord = chords[min(int(note.start // BEATS_PER_BAR), len(chords) - 1)]
+        accented = note.start % 2 == 0 or note.duration >= 1
+        for degree in (note.degree - 1, note.degree + 1, note.degree - 2, note.degree + 2):
+            clean = semitones(degree, before) != 6 and (after is None or semitones(degree, after) != 6)
+            if clean and LOW <= degree <= HIGH and (not accented or (is_chord_tone(degree, chord) and not _clashes(scale, degree))):
+                notes[fix] = replace(note, degree=degree)
+                break
+
+
+COUNTERS = ("thirds", "line")
+_COUNTER_LOW, _COUNTER_HIGH = -5, 4  # the counter voice sits under the lead, around the lead's tonic
+
+
+def _chord_at(chords: tuple[int, ...], start: float) -> int:
+    return chords[min(int(start // BEATS_PER_BAR), len(chords) - 1)]
+
+
+def _under(scale: Scale, degree: int, chord: int, lead: int | None) -> bool:
+    """A note the counter may hold: a chord tone clear of the drone, a third or more under the lead, never its octave."""
+    if not (_COUNTER_LOW <= degree <= _COUNTER_HIGH and is_chord_tone(degree, chord)) or _clashes(scale, degree):
+        return False
+    return lead is None or (degree <= lead - 2 and (lead - degree) % 7 != 0)
+
+
+def _thirds(notes: list[_Note], scale: Scale, chords: tuple[int, ...]) -> list[_Note]:
+    """A second voice under every held lead note: a third below, else a sixth, else a fifth."""
+    voice = []
+    for note in notes:
+        if note.duration < 1:
+            continue
+        chord = _chord_at(chords, note.start)
+        for gap in (2, 5, 4):
+            if _under(scale, note.degree - gap, chord, note.degree):
+                voice.append(_Note(note.start, note.duration, note.degree - gap))
+                break
+    return voice
+
+
+def _line(notes: list[_Note], scale: Scale, chords: tuple[int, ...]) -> list[_Note]:
+    """A slow counter-melody in half notes (a whole note in the cadence bar) that moves against the lead.
+
+    Each note is a chord tone under the lead, as close as possible to the one before it; it moves
+    the other way when the lead moves, and holds on (one longer note) when that is closest.
+    """
+    voice: list[_Note] = []
+    previous = lead_before = None
+    for bar, chord in enumerate(chords):
+        last = bar == len(chords) - 1
+        for beat in (0,) if last else (0, 2):
+            t = bar * BEATS_PER_BAR + beat
+            sounding = [n for n in notes if n.start <= t]
+            lead = sounding[-1].degree if sounding else None
+            span = range(_COUNTER_LOW, _COUNTER_HIGH + 1)
+            options = [d for d in span if _under(scale, d, chord, lead)] or [d for d in span if _under(scale, d, chord, None)]
+            if not options:
+                continue
+            heading = 0 if lead is None or lead_before is None else (lead > lead_before) - (lead < lead_before)
+
+            def cost(d: int) -> float:
+                if previous is None:
+                    return abs(d + 2)  # open a little under the lead's tonic
+                motion = (d > previous) - (d < previous)
+                return abs(d - previous) + (2 if motion and motion == heading else 0)
+
+            degree = min(options, key=lambda d: (cost(d), d))
+            length = BEATS_PER_BAR if last else 2
+            if voice and voice[-1].degree == degree and voice[-1].start + voice[-1].duration == t:
+                voice[-1] = replace(voice[-1], duration=voice[-1].duration + length)  # linger
+            else:
+                voice.append(_Note(t, length, degree))
+            previous = degree
+            lead_before = lead if lead is not None else lead_before
+    return voice
+
+
 def melody_phrase(
     rng: random.Random, scale: Scale, tonic: int, chords: tuple[int, ...], motifs: tuple[Motif, ...],
-    anchor: int, resolve: bool, boost: int = 0, shifts: tuple[int, ...] = (),
+    anchor: int, resolve: bool, boost: int = 0, shifts: tuple[int, ...] = (), counter: str | None = None,
 ) -> list[NoteEvent]:
     """Motif bars sequenced from the first bar's opening note, then a cadence bar.
 
     ``shifts`` moves each bar's starting point that many scale steps from the
     opening note, so a phrase can climb or sink instead of restating itself.
-    With ``resolve`` the cadence lands on the tonic. Times are beats from the
-    phrase start.
+    With ``resolve`` the cadence lands on the tonic. ``counter`` (one of
+    ``COUNTERS``) adds a second voice under the lead, on the "counter" track.
+    Times are beats from the phrase start.
     """
     notes: list[_Note] = []
     for i, motif in enumerate(motifs):
@@ -166,6 +299,8 @@ def melody_phrase(
             anchor = bar[0].degree
         notes += bar
     notes += cadence(rng, chords[len(motifs)], notes[-1].degree, len(motifs) * BEATS_PER_BAR, resolve)
+    _clear_the_drone(notes, scale, chords)
+    _smooth_tritones(notes, scale, chords)
 
     events = []
     for note in notes:
@@ -174,4 +309,11 @@ def melody_phrase(
         gate = note.duration if note.duration >= 3 else note.duration * 0.9
         velocity = min(127, 84 + accent + boost + rng.randint(-3, 3))
         events.append(NoteEvent("lead", note.start, gate, scale.pitch(note.degree, tonic), velocity))
+    if counter is not None:
+        voice = _thirds(notes, scale, chords) if counter == "thirds" else _line(notes, scale, chords)
+        for note in voice:
+            accent = 6 if note.start % BEATS_PER_BAR == 0 else 0
+            gate = note.duration if note.duration >= 3 else note.duration * 0.9
+            velocity = min(127, 66 + accent + boost // 2)
+            events.append(NoteEvent("counter", note.start, gate, scale.pitch(note.degree, tonic), velocity))
     return events

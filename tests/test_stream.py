@@ -121,19 +121,20 @@ def test_calm_music_changes_flavour_between_regions():
 
 
 def test_lead_bars_rarely_repeat():
-    """Most bars of a calm stream's lead are ones not heard before (rhythm and intervals, in any key).
+    """Most melodic bars (three notes or more) of a calm stream's lead are ones not heard before.
 
-    Not all: themes often grow out of the last region's, so some material comes back on purpose."""
+    Rhythm and intervals, in any key. Bars of one or two held notes are left out: lingering
+    on a note is meant to recur. Not all: themes often grow out of the last region's."""
     for seed in range(4):
         shapes = []
         for p in take(seed, 60):
             lead = sorted((e for e in p.events if e.track == "lead"), key=lambda e: e.start)
             for bar in range(int(p.beats // 4)):
                 notes = [e for e in lead if bar * 4 <= e.start < bar * 4 + 4]
-                if notes:  # an intro has no lead
+                if len(notes) >= 3:  # an intro has no lead; held notes are meant to recur
                     rhythm = tuple(e.start % 4 for e in notes)
                     shapes.append((rhythm, tuple(b.pitch - a.pitch for a, b in zip(notes, notes[1:]))))
-        assert len(set(shapes)) / len(shapes) > 0.5, seed  # ambient long notes allow fewer shapes
+        assert len(set(shapes)) / len(shapes) > 0.7, seed
 
 
 def test_combat_fills_vary():
@@ -353,3 +354,32 @@ def test_lead_never_holds_or_accents_a_note_outside_the_chord():
                 tones = {(p.scale.root + MODES[p.scale.mode][(chord + k) % 7]) % 12 for k in (0, 2, 4)}
                 if e.start % 2 == 0 or e.duration >= 0.9:  # beat 1 or 3, or a quarter and longer
                     assert e.pitch % 12 in tones, (seed, p.index, e)
+
+
+def test_held_lead_notes_never_grind_against_the_drone():
+    """No held lead note sits a semitone or a tritone from the region's drone (tonic and fifth)."""
+    for seed in range(6):
+        drone = []
+        for p in take(seed, 30, style="normal"):
+            drone = [e.pitch for e in p.events if e.track == "drone" and e.duration > p.beats] or drone
+            for e in p.events:
+                if e.track == "lead" and e.duration >= 0.9:
+                    assert all((e.pitch - q) % 12 not in (1, 6, 11) for q in drone), (seed, p.index, e)
+
+
+def test_counter_voice_sits_in_the_chord_under_the_lead_and_clear_of_the_drone():
+    from dungeon_synth_gen.theory import MODES
+
+    heard = 0
+    for seed in range(6):
+        drone = []
+        for p in take(seed, 30, style="normal"):
+            drone = [e.pitch for e in p.events if e.track == "drone" and e.duration > p.beats] or drone
+            counter = [e for e in p.events if e.track == "counter"]
+            heard += bool(counter)
+            for e in counter:
+                chord = p.section.chords[int(e.start // 4)]
+                tones = {(p.scale.root + MODES[p.scale.mode][(chord + k) % 7]) % 12 for k in (0, 2, 4)}
+                assert e.pitch % 12 in tones, (seed, p.index, e)
+                assert all((e.pitch - q) % 12 not in (1, 6, 11) for q in drone), (seed, p.index, e)
+    assert heard >= 20  # it comes and goes: in some phrases, not all

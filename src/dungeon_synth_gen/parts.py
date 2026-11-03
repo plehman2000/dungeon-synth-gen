@@ -55,6 +55,7 @@ BASS_STYLES: dict[str, tuple[tuple[float, float, int | str], ...]] = {
     "sludge": ((0, 2.5, 0), (2.5, 0.5, 0), (3, 1, -1)),
 }
 
+REST = -1  # in an arpeggio pattern: a gap
 # Eighth-note arpeggio patterns over (root, third, fifth, octave).
 ARP_PATTERNS: tuple[tuple[int, ...], ...] = (
     (0, 1, 2, 1, 0, 1, 2, 1),
@@ -62,6 +63,10 @@ ARP_PATTERNS: tuple[tuple[int, ...], ...] = (
     (0, 1, 2, 3, 0, 1, 2, 3),
     (0, 2, 3, 2, 1, 2, 3, 2),
     (0, 1, 2, 3, 2, 1, 0, 1),
+    (3, 2, 1, 0, 1, 2, 3, 2),
+    (0, 2, REST, 2, 1, 2, REST, 3),
+    (0, REST, 1, 2, REST, 2, 3, 2),
+    (0, 1, 2, 1, 3, 2, 1, 2),
 )
 # Combat arpeggios are power chords over (root, fifth, octave, third): the third,
 # which is what makes a chord sound bright or sad, only flickers past.
@@ -71,7 +76,11 @@ GRIM_ARP_PATTERNS: tuple[tuple[int, ...], ...] = (
     (0, 1, 2, 1, 0, 1, 3, 1),
     (0, 0, 1, 0, 0, 0, 2, 1),
     (2, 1, 0, 1, 2, 1, 0, 1),
+    (0, 0, REST, 0, 2, 0, REST, 1),
+    (0, 2, 0, 1, 0, 2, 0, 3),
 )
+# Which of a phrase's two arpeggio patterns each bar plays: A its own, B the other one.
+_ARP_SHAPES = ("AAAA", "AABA", "ABAB", "AAAB", "ABAA")
 _ARP_VELOCITY = {"intro": 54, "theme": 60, "contrast": 68, "return": 62}
 
 # Drum bar patterns on a sixteenth-note grid: (step, drum, velocity).
@@ -123,6 +132,11 @@ DRUM_PATTERNS: dict[str, tuple[tuple[int, int, int], ...]] = {
 _FILLS: dict[str, tuple[tuple[tuple[int, int, int], ...] | None, ...]] = {
     "normal": (
         ((8, MID_TOM, 80), (10, MID_TOM, 85), (12, LOW_TOM, 95), (13, LOW_TOM, 100), (14, LOW_TOM, 105), (15, LOW_TOM, 110)),
+        # A snare pickup.
+        ((8, KICK, 90), (12, SNARE, 70), (14, SNARE, 80), (15, SNARE, 90)),
+        # Toms answering the kick.
+        ((8, LOW_TOM, 90), (11, LOW_TOM, 75), (12, KICK, 95), (14, MID_TOM, 85), (15, LOW_TOM, 95)),
+        None,
     ),
     "combat": (
         # Snare roll into the toms.
@@ -151,6 +165,15 @@ _DRUM_ACCENTS: dict[str, tuple[tuple[str, ...], tuple[str, ...]]] = {
     "ambient": ((), ()),
 }
 _ENDING_HIT = ((0, KICK, 110), (0, CRASH, 90))
+# Hits added to every second bar, drawn per phrase, so a groove answers itself instead of looping one bar.
+_VARIATIONS: dict[str, tuple[tuple[tuple[int, int, int], ...] | None, ...]] = {
+    "normal": (((15, LOW_TOM, 55),), ((10, KICK, 65),), ((6, LOW_TOM, 50), (7, LOW_TOM, 45)), None),
+    "combat": (
+        ((14, KICK, 95),), ((7, SNARE, 45), (15, SNARE, 50)), ((10, KICK, 100), (11, KICK, 85)),
+        ((6, KICK, 90), (14, SNARE, 70)), ((3, KICK, 85),), None,
+    ),
+    "ambient": (None,),
+}
 
 
 @dataclass(frozen=True)
@@ -216,7 +239,7 @@ FLAVOURS: dict[str, Flavour] = {
         0.85,
         {"intro": ("whole",), "theme": ("whole",), "contrast": ("halves",), "return": ("whole",)},
         {},
-        (0.5, 1.0),
+        (1.0, 2.0),
         lead_octave=1,
     ),
     # Combat.
@@ -352,16 +375,26 @@ def bassline(
     rng: random.Random, scale: Scale, tonic: int, chords: tuple[int, ...], groove: Groove, role: str,
     next_chord: int, ending: bool = False,
 ) -> list[NoteEvent]:
-    """One phrase of bass; ``next_chord`` opens the following phrase, for approach notes."""
+    """One phrase of bass; ``next_chord`` opens the following phrase, for approach notes.
+
+    Some phrases turn around in their last beat: a step (or, in combat, a sixteenth-note
+    run) leading into the next phrase's root, instead of the pattern going round again.
+    """
     pattern = groove.bass[role]
+    turn = not ending and rng.random() < _TURNAROUND
     events = []
     for bar, chord in enumerate(chords):
         is_last = bar == len(chords) - 1
         root = fold(chord)
         next_root = fold(next_chord if is_last else chords[bar + 1])
-        for start, length, offset in BASS_STYLES["whole" if ending and is_last else pattern]:
+        notes = BASS_STYLES["whole" if ending and is_last else pattern]
+        if turn and is_last:
+            notes = _turnaround(rng, notes, next_root, groove.style == "combat")
+        for start, length, offset in notes:
             if offset == "approach":
                 degree = next_root + rng.choice((1, -1))
+            elif isinstance(offset, tuple):  # ("to", steps): that many scale steps from the next root
+                degree = next_root + offset[1]
             else:
                 degree = 0 if offset == "tonic" else root + offset
             velocity = 96 if start == 0 else 84 if start % 0.5 == 0 else 72  # sixteenths between the eighths sit back
@@ -369,9 +402,28 @@ def bassline(
     return events
 
 
-def arpeggio(scale: Scale, tonic: int, chords: tuple[int, ...], groove: Groove, role: str, ending: bool = False) -> list[NoteEvent]:
+_TURNAROUND = 0.4  # chance a phrase's bass leads into the next one
+
+
+def _turnaround(rng: random.Random, notes, next_root: int, combat: bool):
+    """The bar's notes up to beat four, then a way into ``next_root``: one step, or a three-note run."""
+    kept = [(s, min(length, 3 - s), offset) for s, length, offset in notes if s < 3]
+    side = rng.choice((1, -1))
+    if abs(next_root + 3 * side) > 6:
+        side = -side
+    if combat:
+        return (*kept, (3, 0.25, ("to", 3 * side)), (3.25, 0.25, ("to", 2 * side)), (3.5, 0.5, ("to", side)))
+    return (*kept, (3, 1, ("to", side)))
+
+
+def arpeggio(
+    scale: Scale, tonic: int, chords: tuple[int, ...], groove: Groove, role: str, ending: bool = False,
+    rng: random.Random | None = None,
+) -> list[NoteEvent]:
+    """One phrase of arpeggio. With ``rng``, bars trade between the phrase's two patterns (``_ARP_SHAPES``)."""
     main, contrast = groove.arps
-    pattern = contrast if role == "contrast" else main
+    own, other = (contrast, main) if role == "contrast" else (main, contrast)
+    shape = rng.choice(_ARP_SHAPES) if rng is not None else "AAAA"
     velocity = _ARP_VELOCITY[role]
     step_beats, ring = groove.arp
     events = []
@@ -384,9 +436,13 @@ def arpeggio(scale: Scale, tonic: int, chords: tuple[int, ...], groove: Groove, 
             for beat, tone in enumerate(tones):
                 events.append(NoteEvent("arp", start + beat, BEATS_PER_BAR - beat, scale.pitch(tone, tonic), velocity))
             continue
+        pattern = own if shape[bar % len(shape)] == "A" else other
         for step in range(int(BEATS_PER_BAR / step_beats)):
+            tone = pattern[step % len(pattern)]
+            if tone == REST:
+                continue
             accent = 12 if step == 0 else 6 if step * step_beats == 2 else 0
-            pitch = scale.pitch(tones[pattern[step % len(pattern)]], tonic)
+            pitch = scale.pitch(tones[tone], tonic)
             length = min(ring, (len(chords) - bar) * BEATS_PER_BAR - step * step_beats)  # stay inside the phrase
             events.append(NoteEvent("arp", start + step * step_beats, length, pitch, velocity + accent))
     return events
@@ -415,9 +471,13 @@ def percussion(
     filled, crashed = _DRUM_ACCENTS[groove.style]
     base = _drums_at(DRUM_PATTERNS[groove.drums[role]], groove.intensity)
     grave = groove.intensity >= 0.75  # every bar opens on a crash
+    extra = rng.choice(_VARIATIONS[groove.style]) if rng is not None else None
+    if extra is None or not 0.25 < groove.intensity < 1:
+        extra = ()
+    answer = base + tuple(hit for hit in extra if hit[:2] not in {p[:2] for p in base})
     events = []
     for bar in range(bars):
-        pattern = base
+        pattern = answer if bar % 2 else base
         if ending and bar == bars - 1:
             pattern = _ENDING_HIT
         elif role in filled and bar == bars - 1 and (fill := _fill(groove.style, rng)) is not None:
