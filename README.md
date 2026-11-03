@@ -18,7 +18,7 @@ uv run pytest
 
 `--endless` does not chain separate songs. A single renderer runs for the whole stream, so notes, filters, echo and reverb carry across every boundary.
 
-- Music comes in key regions of 4-6 phrases (about a minute each): intro, theme, variation, contrast, development, return.
+- Music comes in key regions of 5-8 phrases (about 80 s each): intro, theme, variation, contrast, development, interlude, return. The lead rests in intros and interludes; two intros open the stream, so it enters after about half a minute, and it sits around C5.
 - Each region draws a new palette. Its theme usually evolves from the previous region's theme through the variation engine.
 - Keys move only to neighbours that contain the old tonic. The drone of one region crossfades into the next at constant level.
 - With no `--style`, each region picks normal or ambient; combat is never chosen at random.
@@ -41,10 +41,10 @@ During `--endless`, press `c` to toggle combat on and off. The switch is instant
 | `--style` | Sound |
 | --- | --- |
 | `normal` | Slow dungeon crawl, about 50-100 BPM by flavour, minor modes. Each key region draws a flavour (below) |
-| `ambient` | Calm and open: major-side modes (ionian, lydian, mixolydian, some dorian), long notes and rests, no drums. Each key region draws a flavour (below) |
+| `ambient` | Calm and open, but mostly minor: dorian and aeolian, sometimes lydian or mixolydian, never plain major; long notes and rests, no drums. Each key region draws a flavour (below) |
 | `combat` | The same seed's chords and melody, faster, with drums in every section and fills between them. Each key region draws one of five flavours (below), so a long fight keeps changing gear |
 
-Without `--style`, a fixed piece's style is drawn from its seed: normal 2/3, ambient 1/3. Combat pieces are 16 bars like the others, so they run 25-40 s.
+Without `--style`, a fixed piece's style is drawn from its seed: normal 3/4, ambient 1/4. Calm tempos sit around 50-75 BPM. Combat pieces are 16 bars like the others, so they run 25-40 s.
 
 ### Calm flavours
 

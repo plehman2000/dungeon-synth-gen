@@ -32,15 +32,16 @@ _DUNGEON_MODES = {"aeolian": 3, "phrygian": 3, "dorian": 2, "harmonic": 2}
 _MODE_WEIGHTS = {
     "normal": _DUNGEON_MODES,
     "combat": _DUNGEON_MODES,
-    "ambient": {"ionian": 3, "lydian": 2, "mixolydian": 2, "dorian": 1},
+    "ambient": {"dorian": 3, "aeolian": 2, "lydian": 1, "mixolydian": 1},  # open, but mostly minor: never plain major
 }
 _ROOTS = ("D", "E", "A", "C", "G", "F#", "B")
 TEMPO_RANGE = (60, 84)
 TEMPO_SCALE = {"normal": 1, "combat": 2, "ambient": 1}  # for the opening draw; each groove then sets its own
 STYLES = tuple(TEMPO_SCALE)
-STYLE_WEIGHTS = {"normal": 2, "ambient": 1}
+STYLE_WEIGHTS = {"normal": 3, "ambient": 1}
 _RHYTHMS = {"normal": melody.MOTIF_RHYTHMS, "combat": melody.MOTIF_RHYTHMS, "ambient": melody.AMBIENT_RHYTHMS}
-_EVOLVE = 0.25  # chance a region's theme grows out of the last region's instead of starting fresh
+_EVOLVE = 0.6  # chance a region's theme grows out of the last region's instead of starting fresh
+_KEEP_FLAVOUR = 0.6  # chance a region keeps the last region's flavour (its synths and patterns), when the style stays
 
 
 def stream(seed: int, name: str) -> random.Random:
@@ -129,10 +130,12 @@ def new_palette(rng: random.Random, scale: Scale, style: str, previous: Palette 
     else:
         motif = melody.random_motif(rng, rhythms=rhythms)
     contrast_motif = melody.random_motif(rng, avoid_rhythm=motif.rhythm, rhythms=rhythms)
-    theme_anchor = rng.choice((2, 4, 4, 7))
-    contrast_anchor = rng.choice((7, 9))
+    # Low anchors keep the lead in its middle register; it climbs within phrases, not from the start.
+    theme_anchor = rng.choice((0, 2, 2, 4))
+    contrast_anchor = rng.choice((4, 5))
     answer = melody.random_motif(rng, avoid_rhythm=motif.rhythm, rhythms=rhythms)
-    groove = parts.draw_groove(rng, style)  # last, so the style never shifts the melody's draws
+    same_sound = previous is not None and previous.groove.style == style and rng.random() < _KEEP_FLAVOUR
+    groove = parts.draw_groove(rng, style, previous.groove.sound if same_sound else None)  # last, so the style never shifts the melody's draws
     return Palette(
         scale, theme, contrast, cadence, motif, contrast_motif, answer, theme_anchor, contrast_anchor, groove
     )
@@ -165,7 +168,7 @@ def _lead_plan(
 ) -> tuple[tuple[Motif, ...], int, int, tuple[int, ...]] | None:
     """(motifs for the first three bars, starting degree, velocity boost, bar shifts), or None for no lead."""
     theme, contrast = pal.theme_motif, pal.contrast_motif
-    if name == "intro":
+    if name in ("intro", "interlude"):
         return None
     if name == "variation":
         theme = vary(theme, rng)[1]

@@ -53,7 +53,7 @@ _APPROACHES: tuple[tuple[int, ...], ...] = ((1, 2, 3), (-1, 1, 2), (1, -1, 0), (
 
 _STEP_CHOICES = (-1, 1, -2, 2, 0, -3, 3)
 _STEP_WEIGHTS = (30, 30, 10, 10, 6, 4, 4)
-LOW, HIGH = -3, 11  # lead range in scale degrees around the lead tonic
+LOW, HIGH = -3, 9  # lead range in scale degrees around the lead tonic: up to about a tenth above it
 
 
 @dataclass(frozen=True)
@@ -92,22 +92,25 @@ def _reflect(degree: int) -> int:
 def realize(motif: Motif, chord: int, anchor: int, bar_start: float) -> list[_Note]:
     """Place ``motif`` in a bar over ``chord``, starting near degree ``anchor``.
 
-    The first note, notes on beats 1 and 3, and long notes snap to the nearest
-    chord tone so the melody agrees with the harmony; notes between them pass
-    freely through the scale.
+    The first note, notes on beats 1 and 3, and anything a quarter or longer
+    snap to the nearest chord tone, so the melody agrees with the harmony. Only
+    short notes pass between them, and only by step: a note outside the chord
+    that would be leapt into and out of snaps too, since that is what sounds wrong.
     """
     notes: list[_Note] = []
     degree = nearest_chord_tone(anchor, chord)
-    steps = iter(motif.steps)
+    steps = list(motif.steps)
     t = 0.0
     for d in motif.rhythm:
         if d < 0:
             t -= d
             continue
         if notes:
-            step = next(steps)
+            step = steps[len(notes) - 1]
+            following = steps[len(notes)] if len(notes) < len(steps) else 0
             degree = _reflect(degree + step)
-            if t % 2 == 0 or d >= 1.5:
+            leapt = abs(step) >= 2 and abs(following) >= 2
+            if t % 2 == 0 or d >= 1 or leapt:
                 degree = nearest_chord_tone(degree, chord, step)
         notes.append(_Note(bar_start + t, d, degree))
         t += d
@@ -115,7 +118,10 @@ def realize(motif: Motif, chord: int, anchor: int, bar_start: float) -> list[_No
 
 
 def cadence(rng: random.Random, chord: int, previous: int, bar_start: float, resolve: bool) -> list[_Note]:
-    """Close a phrase on a chord tone (the tonic, if ``resolve``), reached by one of ``_APPROACHES``, and hold it."""
+    """Close a phrase on a chord tone (the tonic, if ``resolve``), reached by one of ``_APPROACHES``, and hold it.
+
+    Approach notes that land on beat 1 or 3, or are held, are chord tones too.
+    """
     if resolve:
         target = min((0, 7), key=lambda d: abs(d - previous))
         rhythm = rng.choice([r for r in CADENCE_RHYTHMS if sum(1 for d in r if d > 0) > 1])
@@ -133,7 +139,10 @@ def cadence(rng: random.Random, chord: int, previous: int, bar_start: float, res
             continue
         before = sounding - 1 - len(notes)  # notes still to come before the final one
         offset = approach[before - 1] if before else 0
-        notes.append(_Note(bar_start + t, d, target + direction * offset))
+        degree = target + direction * offset
+        if before and (t % 2 == 0 or d >= 1):  # an approach note on a strong beat, or a quarter or longer, sits in the chord
+            degree = nearest_chord_tone(degree, chord, direction)
+        notes.append(_Note(bar_start + t, d, degree))
         t += d
     return notes
 

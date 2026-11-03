@@ -268,6 +268,11 @@ SOUNDS: dict[str, dict[str, Instrument]] = {
     "chiptrash": CHIPTRASH_INSTRUMENTS,
 }
 _CALM_SOUNDS = ("normal", "ambient", "crypt", "organ", "harpsichord", "march", "harp", "mist", "musicbox")
+_CALM_LEAD_TRIM = 0.7  # calm leads sit back in the mix, about 3 dB under their sets as written
+SOUNDS.update({
+    name: SOUNDS[name] | {"lead": replace(SOUNDS[name]["lead"], gain=SOUNDS[name]["lead"].gain * _CALM_LEAD_TRIM)}
+    for name in _CALM_SOUNDS
+})
 
 
 @functools.cache

@@ -23,6 +23,7 @@ ROLES = {
     "variation": "theme",
     "contrast": "contrast",
     "development": "contrast",
+    "interlude": "intro",  # a breather before the return: the lead rests
     "return": "return",
 }
 
@@ -168,14 +169,14 @@ class Flavour:
 FLAVOURS: dict[str, Flavour] = {
     # Calm. The original: NES square lead, triangle bass, a heartbeat kick.
     "crypt": Flavour(
-        1.0,
+        0.85,
         {"intro": ("whole",), "theme": ("halves", "pulse"), "contrast": ("walk",), "return": ("halves", "pulse")},
         {"theme": ("heartbeat",), "contrast": ("march", "war"), "return": ("heartbeat",)},
         (0.5, 0.45),
     ),
     # A slow chapel organ: held chords, a pedal bass, no drums.
     "organ": Flavour(
-        0.85,
+        0.75,
         {"intro": ("whole",), "theme": ("whole", "halves"), "contrast": ("halves",), "return": ("whole", "halves")},
         {},
         (1.0, 0.95),
@@ -183,28 +184,28 @@ FLAVOURS: dict[str, Flavour] = {
     ),
     # Plucked and quick: sixteenth-note harpsichord arps over a walking bass.
     "harpsichord": Flavour(
-        1.2,
+        1.0,
         {"intro": ("halves",), "theme": ("walk", "pulse"), "contrast": ("walk",), "return": ("walk", "halves")},
         {},
         (0.25, 0.2),
     ),
     # Toms and a snare: the dungeon on the move.
     "march": Flavour(
-        1.1,
+        0.95,
         {"intro": ("pulse",), "theme": ("pulse", "walk"), "contrast": ("walk",), "return": ("pulse",)},
         {"intro": ("heartbeat",), "theme": ("march", "war"), "contrast": ("war",), "return": ("march",)},
         (0.5, 0.3),
     ),
     # Ambient. Soft plucks ringing over one another.
     "harp": Flavour(
-        1.0,
+        0.85,
         {"intro": ("whole",), "theme": ("whole",), "contrast": ("halves",), "return": ("whole",)},
         {},
         (1.0, 2.0),
     ),
     # A slow-swelling choir of saws over a held chord.
     "mist": Flavour(
-        0.8,
+        0.7,
         {"intro": ("whole",), "theme": ("whole",), "contrast": ("whole",), "return": ("whole",)},
         {},
         (2.0, 3.0),
@@ -212,7 +213,7 @@ FLAVOURS: dict[str, Flavour] = {
     ),
     # A music box an octave up, chiming over eighths.
     "musicbox": Flavour(
-        1.0,
+        0.85,
         {"intro": ("whole",), "theme": ("whole",), "contrast": ("halves",), "return": ("whole",)},
         {},
         (0.5, 1.0),
@@ -314,10 +315,11 @@ def intensify(groove: Groove, intensity: float) -> Groove:
     return replace(groove, bass=bass, arp=(step, ring), intensity=x)
 
 
-def draw_groove(rng: random.Random, style: str) -> Groove:
+def draw_groove(rng: random.Random, style: str, keep: str | None = None) -> Groove:
+    """A groove in ``style``: a fresh flavour, or the ``keep`` flavour (patterns redrawn) to stay in the same sound."""
     arps = tuple(rng.sample(GRIM_ARP_PATTERNS if style == "combat" else ARP_PATTERNS, 2))
     weights = STYLE_FLAVOURS[style]
-    name = rng.choices(list(weights), weights=list(weights.values()))[0]
+    name = keep or rng.choices(list(weights), weights=list(weights.values()))[0]
     flavour = FLAVOURS[name]
     bass = {role: rng.choice(p) for role, p in flavour.bass.items()}
     drums = {role: rng.choice(p) for role, p in flavour.drums.items()}

@@ -121,7 +121,9 @@ def test_calm_music_changes_flavour_between_regions():
 
 
 def test_lead_bars_rarely_repeat():
-    """Most bars of a calm stream's lead are ones not heard before (rhythm and intervals, in any key)."""
+    """Most bars of a calm stream's lead are ones not heard before (rhythm and intervals, in any key).
+
+    Not all: themes often grow out of the last region's, so some material comes back on purpose."""
     for seed in range(4):
         shapes = []
         for p in take(seed, 60):
@@ -131,7 +133,7 @@ def test_lead_bars_rarely_repeat():
                 if notes:  # an intro has no lead
                     rhythm = tuple(e.start % 4 for e in notes)
                     shapes.append((rhythm, tuple(b.pitch - a.pitch for a, b in zip(notes, notes[1:]))))
-        assert len(set(shapes)) / len(shapes) > 0.6, seed  # ambient long notes allow fewer shapes
+        assert len(set(shapes)) / len(shapes) > 0.5, seed  # ambient long notes allow fewer shapes
 
 
 def test_combat_fills_vary():
@@ -320,3 +322,34 @@ def test_play_follows_the_switch(monkeypatch):
     block = int(stream._BLOCK * stream.SAMPLE_RATE)
     assert np.allclose(written[0], calm[:block])
     assert np.allclose(written[2], combat[block // 2 + block : block // 2 + 2 * block])
+
+
+def test_lead_sits_in_its_middle_register_and_enters_slowly():
+    pitches = []
+    for seed in range(4):
+        phrases = take(seed, 30)
+        assert not any(e.track == "lead" for p in phrases[:2] for e in p.events)  # two intros before the lead
+        pitches += [e.pitch for p in phrases for e in p.events if e.track == "lead"]
+    assert np.median(pitches) <= 74  # around C5, not up in the sixth octave
+
+
+def test_regions_linger():
+    phrases = take(2, 80)
+    regions = {p.region for p in phrases}
+    assert len(phrases) / len(regions) >= 5  # phrases per key region
+    boundaries = [(a, b) for a, b in zip(phrases, phrases[1:]) if a.region != b.region]
+    assert any(a.scale.root == b.scale.root for a, b in boundaries)  # some regions stay in the key
+
+
+def test_lead_never_holds_or_accents_a_note_outside_the_chord():
+    from dungeon_synth_gen.theory import MODES
+
+    for seed in range(6):
+        for p in take(seed, 30):
+            for e in p.events:
+                if e.track != "lead":
+                    continue
+                chord = p.section.chords[int(e.start // 4)]
+                tones = {(p.scale.root + MODES[p.scale.mode][(chord + k) % 7]) % 12 for k in (0, 2, 4)}
+                if e.start % 2 == 0 or e.duration >= 0.9:  # beat 1 or 3, or a quarter and longer
+                    assert e.pitch % 12 in tones, (seed, p.index, e)

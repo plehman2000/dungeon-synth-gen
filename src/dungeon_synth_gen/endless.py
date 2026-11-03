@@ -25,18 +25,23 @@ from dungeon_synth_gen.events import BEATS_PER_BAR, NoteEvent, Phrase, Section
 from dungeon_synth_gen.theory import Scale
 
 _TEMPO_STEPS = (-4, -2, 0, 0, 2, 4)  # BPM drift between regions, before the style's tempo scale
-_KEEP_STYLE = 0.5  # chance a region keeps the previous region's style
-_KEEP_MODE = 0.6  # chance a region keeps the previous mode, when the style allows it
+_KEEP_STYLE = 0.75  # chance a region keeps the previous region's style
+_KEEP_MODE = 0.8  # chance a region keeps the previous mode, when the style allows it
+_KEEP_KEY = 0.5  # chance a region stays on the same tonic instead of modulating
 
 
 def _form(rng: random.Random, first: bool) -> list[str]:
-    plan = ["intro"] if first or rng.random() < 0.6 else []
+    """A region's sections. The lead rests in intros and interludes: two intros open the stream,
+    most regions open with one, and some breathe once more before the return."""
+    plan = ["intro", "intro"] if first else ["intro"] if rng.random() < 0.8 else []
     plan.append("theme")
-    if rng.random() < 0.5:
+    if rng.random() < 0.7:
         plan.append("variation")
     plan.append("contrast")
     if rng.random() < 0.5:
         plan.append("development")
+    if rng.random() < 0.4:
+        plan.append("interlude")
     plan.append("return")
     return plan
 
@@ -125,7 +130,10 @@ def endless(
             current_style = arrange.draw_style(form)
         keep_mode = current_style == previous_style and form.random() < _KEEP_MODE
         next_mode = mode or (pal.scale.mode if keep_mode else arrange.draw_mode(form, current_style))
-        next_scale = Scale(root, next_mode) if root is not None else theory.modulate(form, pal.scale, next_mode)
+        if root is not None or form.random() < _KEEP_KEY:
+            next_scale = Scale(pal.scale.root if root is None else root, next_mode)
+        else:
+            next_scale = theory.modulate(form, pal.scale, next_mode)
         if tempo is None:
             low, high = arrange.TEMPO_RANGE
             base = min(high, max(low, base + form.choice(_TEMPO_STEPS)))
