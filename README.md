@@ -42,7 +42,7 @@ During `--endless`, press `c` to toggle combat on and off. The switch is instant
 | --- | --- |
 | `normal` | Slow dungeon crawl, about 50-100 BPM by flavour, minor modes. Each key region draws a flavour (below) |
 | `ambient` | Calm and open, but mostly minor: dorian and aeolian, sometimes lydian or mixolydian, never plain major; long notes and rests, no drums. Each key region draws a flavour (below) |
-| `combat` | The same seed's chords and melody, faster, with drums in every section and fills between them. Each key region draws one of five flavours (below), so a long fight keeps changing gear |
+| `combat` | The same seed's chords and melody, faster (never under 130 BPM, `arrange.COMBAT_MIN_BPM`, unless `--tempo` pins it), with drums in every section and fills between them. Each key region draws one of five flavours (below), so a long fight keeps changing gear |
 
 Without `--style`, a fixed piece's style is drawn from its seed: normal 3/4, ambient 1/4. Calm tempos sit around 50-75 BPM. Combat pieces are 16 bars like the others, so they run 25-40 s.
 

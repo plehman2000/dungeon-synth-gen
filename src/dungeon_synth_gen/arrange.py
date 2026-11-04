@@ -38,6 +38,17 @@ _ROOTS = ("D", "E", "A", "C", "G", "F#", "B")
 TEMPO_RANGE = (60, 84)
 TEMPO_SCALE = {"normal": 1, "combat": 2, "ambient": 1}  # for the opening draw; each groove then sets its own
 STYLES = tuple(TEMPO_SCALE)
+COMBAT_MIN_BPM = 130  # no slow fights: a combat groove never plays under this, whatever its flavour
+
+
+def at_least(bpm: float, style: str) -> float:
+    """``bpm``, raised to ``COMBAT_MIN_BPM`` in combat."""
+    return max(bpm, COMBAT_MIN_BPM) if style == "combat" else bpm
+
+
+def groove_bpm(base: float, groove: Groove) -> float:
+    """The tempo a groove plays at over the region's calm ``base`` tempo."""
+    return at_least(base * groove.tempo, groove.style)
 STYLE_WEIGHTS = {"normal": 3, "ambient": 1}
 _RHYTHMS = {"normal": melody.DUNGEON_RHYTHMS, "combat": melody.DUNGEON_RHYTHMS, "ambient": melody.AMBIENT_RHYTHMS}  # combat is the dungeon piece, faster
 _LEAD_FLOOR = {"normal": 55, "combat": 55, "ambient": 60}  # MIDI note the lead tonic sits at or above: dungeon leads sit a 4th lower
@@ -305,7 +316,7 @@ def compose(
     pal = in_combat(pal, style, mode, intensity, tuple(s.chords for s in sections))
     sections = [replace(s, chords=playable(pal, s.chords)) for s in sections]
     scale = pal.scale
-    tempo = tempo or drawn / TEMPO_SCALE[style] * pal.groove.tempo
+    tempo = tempo or groove_bpm(drawn / TEMPO_SCALE[style], pal.groove)
 
     comp = Composition(
         seed=seed, tempo=tempo, scale=scale, sections=sections, style=style, sound=pal.groove.sound,

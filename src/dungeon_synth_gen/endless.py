@@ -92,7 +92,7 @@ def endless(
         plan = _form(form, first=region == 0)
         chords = [pal.chords(name, palette_rng) for name in plan]
         region_beats = sum(len(c) for c in chords) * BEATS_PER_BAR
-        region_bpm = tempo or base * pal.groove.tempo
+        region_bpm = tempo or arrange.groove_bpm(base, pal.groove)
         if twins:
             gear = twin_style(current_style)
             twin_base = replace(pal, groove=parts.draw_groove(twin_rng, gear))
@@ -111,7 +111,10 @@ def endless(
             twin = None
             if twins:
                 twin_pal = arrange.in_combat(twin_base, gear, mode, x, tuple(chords))
-                twin_bpm = region_bpm / pal.groove.tempo * twin_pal.groove.tempo
+                if tempo:  # the pinned tempo is the region's own; the twin keeps its ratio to it
+                    twin_bpm = arrange.at_least(tempo / pal.groove.tempo * twin_pal.groove.tempo, gear)
+                else:
+                    twin_bpm = arrange.groove_bpm(base, twin_pal.groove)
                 twin_chords, (twin_next,) = arrange.playable(twin_pal, chords[i]), arrange.playable(twin_pal, (next_chord,))
                 twin_events = arrange.build_phrase(twin_rngs, twin_pal, name, twin_chords, twin_next) + drone
                 twin = Phrase(

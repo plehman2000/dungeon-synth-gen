@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from dungeon_synth_gen import stream
-from dungeon_synth_gen.arrange import STYLE_WEIGHTS, compose, seeded_style
+from dungeon_synth_gen.arrange import COMBAT_MIN_BPM, STYLE_WEIGHTS, compose, seeded_style
 from dungeon_synth_gen.endless import endless
 from dungeon_synth_gen.parts import FLAVOURS
 from dungeon_synth_gen.theory import GRIM_MODES
@@ -75,7 +75,16 @@ def factor(p):
 
 def test_combat_stream_runs_at_its_flavours_tempo():
     phrases = take(6, 60, style="combat")
-    assert all(60 * factor(p) <= p.tempo <= 84 * factor(p) for p in phrases)
+    assert all(max(60 * factor(p), COMBAT_MIN_BPM) <= p.tempo <= max(84 * factor(p), COMBAT_MIN_BPM) for p in phrases)
+
+
+@pytest.mark.parametrize("style", [None, "combat"])
+def test_combat_is_never_slow(style):
+    for seed in range(8):
+        for p in take(seed, 40, style=style, twins=True):
+            for version in (p, p.twin):
+                if version.style == "combat":
+                    assert version.tempo >= COMBAT_MIN_BPM, (seed, version.index, version.sound)
 
 
 @pytest.mark.parametrize("style", [None, "combat"])
@@ -236,7 +245,8 @@ def test_twins_leave_the_stream_unchanged_and_share_its_lead(style):
         assert (t.section.name, t.section.start_bar, t.scale.root, t.beats) == (
             p.section.name, p.section.start_bar, p.scale.root, p.beats
         )
-        assert t.tempo == pytest.approx(p.tempo / factor(p) * factor(t))
+        calm, fight = (t, p) if p.style == "combat" else (p, t)
+        assert fight.tempo == pytest.approx(max(calm.tempo / factor(calm) * factor(fight), COMBAT_MIN_BPM))
         rhythm = [(e.start, e.duration) for e in p.events if e.track == "lead"]
         assert [(e.start, e.duration) for e in t.events if e.track == "lead"] == rhythm
         # The region's drone, held past the phrase (a flavour's pad chords are not).

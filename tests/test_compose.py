@@ -1,6 +1,6 @@
 import pytest
 
-from dungeon_synth_gen.arrange import STYLES, compose
+from dungeon_synth_gen.arrange import COMBAT_MIN_BPM, STYLES, compose
 from dungeon_synth_gen.parts import DRUM_PATTERNS, FLAVOURS
 from dungeon_synth_gen.theory import GRIM_MODES, darken
 
@@ -53,7 +53,8 @@ def test_contrast_section_has_drums():
 @pytest.mark.parametrize("seed", range(10))
 def test_combat_is_the_same_piece_at_its_flavours_tempo(seed):
     normal, combat = compose(seed), compose(seed, style="combat")
-    assert combat.tempo == pytest.approx(normal.tempo / FLAVOURS[normal.sound].tempo * FLAVOURS[combat.sound].tempo)
+    flavoured = normal.tempo / FLAVOURS[normal.sound].tempo * FLAVOURS[combat.sound].tempo
+    assert combat.tempo == pytest.approx(max(flavoured, COMBAT_MIN_BPM))
     assert combat.scale == darken(normal.scale)
     assert [(s.name, s.start_bar, len(s.chords)) for s in combat.sections] == [
         (s.name, s.start_bar, len(s.chords)) for s in normal.sections
