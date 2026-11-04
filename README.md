@@ -63,11 +63,11 @@ Without `--style`, a fixed piece's style is drawn from its seed: normal 3/4, amb
 
 | Flavour | Tempo | Sound |
 | --- | --- | --- |
-| `brut` (most likely) | 2x | Carpenter Brut-style darksynth: sixteenth-note bass, octave bounces and climbing riffs on a distorted reese over a full sub, four on the floor with a gated snare, a seven-saw lead driven into fuzz, and a hard sidechain pump |
+| `brut` (most likely) | 2x | Carpenter Brut-style darksynth in minor or dorian only (i, III, iv/IV, v, VI, VII), the lead between about G3 and Ab5: sixteenth-note bass, octave bounces and climbing riffs on a distorted reese over a full sub, four on the floor with a gated snare, a seven-saw lead driven into fuzz, and a hard sidechain pump |
 | `darksynth` | 2x | Eighth-note drive and gallop bass, a five-saw supersaw lead, driven saw plucks, backbeat and thrash drums |
 | `industrial` | 1.75x | Clipped square waves, off-beat pulse bass answering the kick, sixteenth hats, an echoing needle arp |
 | `doom` | 1.5x | Half-time snare, sludge bass that drops to the seventh, fuzz-pulse lead, a cavernous room |
-| `chiptrash` | 2.25x | NES voices at a sprint: triangle gallop bass, thin pulse lead, d-beat and blast beats on the 8-bit kit |
+| `chiptrash` | 2.25x | NES voices at a sprint: triangle gallop bass, thin pulse lead, d-beat and thrash beats on the 8-bit kit |
 
 Every section draws its bass and drum patterns from its flavour's pools, and each flavour has its own synths and mastering (`parts.FLAVOURS`, `parts.STYLE_FLAVOURS`, `synth.SOUNDS`).
 

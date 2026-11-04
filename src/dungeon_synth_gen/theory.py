@@ -123,12 +123,15 @@ class Scale:
         return accidental + numeral + suffix
 
 
-def darken(scale: Scale) -> Scale:
-    """Combat's key: a minor mode stays as it is, a major one turns plain minor on the same tonic.
+def darken(scale: Scale, modes: frozenset[str] = GRIM_MODES) -> Scale:
+    """Combat's key: a mode in ``modes`` stays as it is; any other turns plain minor on the same tonic.
 
-    No exotic remapping: the calm music's own notes, only never major.
+    No exotic remapping: the calm music's own notes, only never major. A flavour can
+    narrow ``modes``, as brut does to aeolian and dorian.
     """
-    return scale if scale.mode in GRIM_MODES else Scale(scale.root, "aeolian")
+    if scale.mode in modes:
+        return scale
+    return Scale(scale.root, "aeolian" if "aeolian" in modes else min(modes))
 
 
 def is_chord_tone(degree: int, chord: int) -> bool:

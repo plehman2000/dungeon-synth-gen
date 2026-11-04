@@ -414,3 +414,25 @@ def test_flavour_from_another_style_is_rejected():
         next(endless(1, style="ambient", flavour="brut"))
     with pytest.raises(ValueError):
         next(endless(1, flavour="polka"))
+
+
+def test_brut_stays_minor_or_dorian_with_its_lead_under_ab5():
+    for seed in range(8):
+        for p in take(seed, 30, flavour="brut"):
+            assert p.scale.mode in ("aeolian", "dorian"), (seed, p.index)
+            assert all(e.pitch <= 80 for e in p.events if e.track == "lead"), (seed, p.index)
+
+
+def test_lead_never_climbs_past_its_range():
+    for seed in range(6):
+        for style in ("normal", "combat"):
+            for p in take(seed, 30, style=style):
+                assert all(e.pitch <= 84 for e in p.events if e.track == "lead"), (seed, style, p.index)
+
+
+def test_chiptrash_never_buzzes_sixteenth_snares():
+    for seed in range(6):
+        for p in take(seed, 30, flavour="chiptrash"):
+            snares = sorted(e.start for e in p.events if e.track == "perc" and e.pitch == 38)
+            runs = sum(1 for a, b in zip(snares, snares[1:]) if b - a == 0.25)
+            assert runs < 4, (seed, p.index)

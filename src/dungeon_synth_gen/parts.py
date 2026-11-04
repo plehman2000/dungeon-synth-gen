@@ -10,7 +10,7 @@ import random
 from dataclasses import dataclass, replace
 
 from dungeon_synth_gen.events import BEATS_PER_BAR, NoteEvent
-from dungeon_synth_gen.theory import Scale, fold
+from dungeon_synth_gen.theory import GRIM_MODES, Scale, fold
 
 # General MIDI drum notes, so exported .mid files play on any GM drum kit.
 KICK, SNARE, HAT, LOW_TOM, MID_TOM, CRASH = 36, 38, 42, 41, 45, 49
@@ -119,7 +119,6 @@ DRUM_PATTERNS: dict[str, tuple[tuple[int, int, int], ...]] = {
         (0, KICK, 115), (3, KICK, 95), (4, SNARE, 108), (8, KICK, 112), (10, KICK, 95), (12, SNARE, 112),
         *((i, HAT, 55) for i in range(0, 16, 2)),
     ),
-    "blast": tuple(hit for i in range(0, 16, 2) for hit in ((i, KICK, 110), (i + 1, SNARE, 90 + 6 * (i % 4 == 2)))),
     "ebm": (
         (0, KICK, 118), (4, KICK, 112), (4, SNARE, 105), (8, KICK, 116), (12, KICK, 112), (12, SNARE, 108),
         *((i, HAT, 75 if i % 4 == 2 else 35) for i in range(16)),
@@ -127,6 +126,11 @@ DRUM_PATTERNS: dict[str, tuple[tuple[int, int, int], ...]] = {
     # The gravest moment of a fight: half time, every hit given room to land.
     "anthem": ((0, KICK, 124), (6, KICK, 88), (8, SNARE, 126), (10, KICK, 92), (14, LOW_TOM, 96)),
 }
+# Snares in straight sixteenths: a build on a real kit, a buzz on the 8-bit noise snare.
+SNARE_BUILD = tuple((i, SNARE, 70 + 7 * (i - 8)) for i in range(8, 16))  # swelling across the half bar
+SNARE_ROLL = ((8, SNARE, 80), (9, SNARE, 70), (10, SNARE, 90), (11, SNARE, 80),
+              (12, MID_TOM, 100), (13, MID_TOM, 100), (14, LOW_TOM, 110), (15, LOW_TOM, 115))  # into the toms
+_NES_KIT = ("chiptrash",)  # combat flavours on the 8-bit kit, which skip both
 # Replace the second half of a section's last bar. Combat draws one per phrase, and None
 # (no fill: the groove plays straight through) is one of the draws.
 _FILLS: dict[str, tuple[tuple[tuple[int, int, int], ...] | None, ...]] = {
@@ -139,17 +143,14 @@ _FILLS: dict[str, tuple[tuple[tuple[int, int, int], ...] | None, ...]] = {
         None,
     ),
     "combat": (
-        # Snare roll into the toms.
-        ((8, SNARE, 80), (9, SNARE, 70), (10, SNARE, 90), (11, SNARE, 80),
-         (12, MID_TOM, 100), (13, MID_TOM, 100), (14, LOW_TOM, 110), (15, LOW_TOM, 115)),
+        SNARE_ROLL,
         # Down the toms.
         ((8, MID_TOM, 105), (9, MID_TOM, 90), (10, MID_TOM, 100), (12, LOW_TOM, 110), (13, LOW_TOM, 95),
          (14, LOW_TOM, 115), (15, KICK, 100)),
         # Unison stabs.
         ((8, KICK, 122), (8, SNARE, 118), (11, KICK, 110), (12, KICK, 122), (12, SNARE, 120), (14, SNARE, 100),
          (15, SNARE, 110)),
-        # A snare build in sixteenths.
-        tuple((i, SNARE, 70 + 7 * (i - 8)) for i in range(8, 16)),
+        SNARE_BUILD,
         # One hit, then the floor drops out.
         ((8, KICK, 124), (8, CRASH, 100)),
         # Kicks answering the snare.
@@ -186,6 +187,8 @@ class Flavour:
     arp: tuple[float, float]  # (beats per arpeggio note, beats each note rings)
     pad: tuple[int, ...] = ()  # chord degrees held under every bar, on the drone's voice; empty for none
     lead_octave: int = 0  # octaves the lead sits above its usual register
+    modes: frozenset[str] = GRIM_MODES  # combat only: the modes it plays in (``theory.darken``)
+    lead_ceiling: int | None = None  # highest MIDI note the lead may reach
 
 
 # Every region draws one, so the music keeps changing colour, and a long fight keeps changing gear.
@@ -244,6 +247,7 @@ FLAVOURS: dict[str, Flavour] = {
     ),
     # Combat.
     # Carpenter Brut territory: sixteenth-note distorted saw bass, four on the floor, gated snare, hard pump.
+    # Minor and dorian only (i, III, iv or IV, v, VI, VII: no bII, no major V), the lead no higher than Ab5.
     "brut": Flavour(
         2.0,
         {"intro": ("pedal", "sixteenths"), "theme": ("pedal", "sixteenths", "bounce", "riff"),
@@ -251,6 +255,8 @@ FLAVOURS: dict[str, Flavour] = {
         {"intro": ("four", "pound"), "theme": ("four", "floor16"), "contrast": ("floor16", "halftime", "four"),
          "return": ("four", "floor16")},
         (0.25, 0.22),
+        modes=frozenset(("aeolian", "dorian")),
+        lead_ceiling=80,
     ),
     "darksynth": Flavour(
         2.0,
@@ -276,7 +282,7 @@ FLAVOURS: dict[str, Flavour] = {
         2.25,
         {"intro": ("gallop",), "theme": ("gallop", "octaves", "bounce"), "contrast": ("riff", "drive"),
          "return": ("gallop", "octaves")},
-        {"intro": ("dbeat",), "theme": ("dbeat", "thrash"), "contrast": ("blast", "thrash"), "return": ("dbeat",)},
+        {"intro": ("dbeat",), "theme": ("dbeat", "thrash"), "contrast": ("thrash", "dbeat"), "return": ("dbeat",)},
         (0.25, 0.2),
     ),
 }
@@ -304,6 +310,7 @@ class Groove:
     intensity: float = 0.5  # 0-1, set per phrase by ``intensify``; 0.5 plays the groove as drawn
     pad: tuple[int, ...] = ()  # chord degrees held under every bar
     lead_octave: int = 0
+    lead_ceiling: int | None = None  # highest MIDI note the lead may reach
 
 
 def level(intensity: float) -> float:
@@ -347,7 +354,10 @@ def draw_groove(rng: random.Random, style: str, keep: str | None = None) -> Groo
     flavour = FLAVOURS[name]
     bass = {role: rng.choice(p) for role, p in flavour.bass.items()}
     drums = {role: rng.choice(p) for role, p in flavour.drums.items()}
-    return Groove(style, bass, drums, arps, name, flavour.tempo, flavour.arp, pad=flavour.pad, lead_octave=flavour.lead_octave)
+    return Groove(
+        style, bass, drums, arps, name, flavour.tempo, flavour.arp, pad=flavour.pad, lead_octave=flavour.lead_octave,
+        lead_ceiling=flavour.lead_ceiling,
+    )
 
 
 def pad(
@@ -449,8 +459,8 @@ def arpeggio(
     return events
 
 
-def _fill(style: str, rng: random.Random | None) -> tuple[tuple[int, int, int], ...] | None:
-    fills = _FILLS[style]
+def _fill(groove: Groove, rng: random.Random | None) -> tuple[tuple[int, int, int], ...] | None:
+    fills = [f for f in _FILLS[groove.style] if not (groove.sound in _NES_KIT and f in (SNARE_BUILD, SNARE_ROLL))]
     return fills[0] if rng is None or len(fills) == 1 else rng.choice(fills)
 
 
@@ -481,7 +491,7 @@ def percussion(
         pattern = answer if bar % 2 else base
         if ending and bar == bars - 1:
             pattern = _ENDING_HIT
-        elif role in filled and bar == bars - 1 and (fill := _fill(groove.style, rng)) is not None:
+        elif role in filled and bar == bars - 1 and (fill := _fill(groove, rng)) is not None:
             pattern = tuple(p for p in pattern if p[0] < 8) + fill
             if grave:
                 pattern += ((0, CRASH, 95),)

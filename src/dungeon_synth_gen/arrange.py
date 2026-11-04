@@ -255,7 +255,7 @@ def build_phrase(
         counter = kind if style != "ambient" and roll < _COUNTER_ODDS.get(name, 0) else None
         lines = melody.melody_phrase(
             rngs.melody, pal.scale, pal.lead_tonic + 12 * pal.groove.lead_octave, chords, motifs, anchor,
-            resolve=role == "return", boost=boost, shifts=shifts, counter=counter,
+            resolve=role == "return", boost=boost, shifts=shifts, counter=counter, ceiling=pal.groove.lead_ceiling,
         )
         events += lines
         if style == "combat" and pal.groove.intensity >= 0.75:
@@ -300,7 +300,7 @@ def in_combat(
     if style != "combat":
         return pal
     x = parts.level(intensity)
-    scale = pal.scale if mode is not None else theory.darken(pal.scale)
+    scale = pal.scale if mode is not None else theory.darken(pal.scale, parts.FLAVOURS[pal.groove.sound].modes)
     return replace(pal, scale=scale, groove=parts.intensify(pal.groove, x))
 
 

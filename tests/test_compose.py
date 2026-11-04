@@ -55,7 +55,7 @@ def test_combat_is_the_same_piece_at_its_flavours_tempo(seed):
     normal, combat = compose(seed), compose(seed, style="combat")
     flavoured = normal.tempo / FLAVOURS[normal.sound].tempo * FLAVOURS[combat.sound].tempo
     assert combat.tempo == pytest.approx(max(flavoured, COMBAT_MIN_BPM))
-    assert combat.scale == darken(normal.scale)
+    assert combat.scale == darken(normal.scale, FLAVOURS[combat.sound].modes)
     assert [(s.name, s.start_bar, len(s.chords)) for s in combat.sections] == [
         (s.name, s.start_bar, len(s.chords)) for s in normal.sections
     ]

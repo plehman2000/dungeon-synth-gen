@@ -162,6 +162,26 @@ def cadence(rng: random.Random, chord: int, previous: int, bar_start: float, res
     return notes
 
 
+def _chord_at(chords: tuple[int, ...], start: float) -> int:
+    return chords[min(int(start // BEATS_PER_BAR), len(chords) - 1)]
+
+
+def _keep_under(notes: list[_Note], chords: tuple[int, ...], high: int) -> None:
+    """Fold any note above ``high`` back under it; a held or accented one lands on the chord tone below.
+
+    Motif steps stay inside the range, but a cadence's approach notes can climb past it.
+    """
+    for i, note in enumerate(notes):
+        if note.degree <= high:
+            continue
+        degree = 2 * high - note.degree
+        if note.start % 2 == 0 or note.duration >= 0.9:
+            chord = _chord_at(chords, note.start)
+            while not is_chord_tone(degree, chord):
+                degree -= 1
+        notes[i] = replace(note, degree=degree)
+
+
 _HARSH = (1, 6, 11)  # semitones from a drone note: a minor second, a tritone, a major seventh
 
 
@@ -171,7 +191,7 @@ def _clashes(scale: Scale, degree: int) -> bool:
     return any((pitch - scale.pitch(d, 0)) % 12 in _HARSH for d in (0, 4))
 
 
-def _clear_the_drone(notes: list[_Note], scale: Scale, chords: tuple[int, ...]) -> None:
+def _clear_the_drone(notes: list[_Note], scale: Scale, chords: tuple[int, ...], high: int = HIGH) -> None:
     """Move held or accented notes that grind against the drone to the nearest chord tone that doesn't.
 
     Over Phrygian's bII, for instance, the lead holds its fifth instead of its root:
@@ -182,12 +202,12 @@ def _clear_the_drone(notes: list[_Note], scale: Scale, chords: tuple[int, ...]) 
         if not accented or not _clashes(scale, note.degree):
             continue
         chord = chords[min(int(note.start // BEATS_PER_BAR), len(chords) - 1)]
-        options = [d for d in range(LOW, HIGH + 1) if is_chord_tone(d, chord) and not _clashes(scale, d)]
+        options = [d for d in range(LOW, high + 1) if is_chord_tone(d, chord) and not _clashes(scale, d)]
         if options:
             notes[i] = replace(note, degree=min(options, key=lambda d: (abs(d - note.degree), d)))
 
 
-def _smooth_tritones(notes: list[_Note], scale: Scale, chords: tuple[int, ...]) -> None:
+def _smooth_tritones(notes: list[_Note], scale: Scale, chords: tuple[int, ...], high: int = HIGH) -> None:
     """Re-pick any note a tritone from the one before it, a step or two over.
 
     A held or accented note stays a chord tone, and the phrase's last note stays
@@ -208,17 +228,13 @@ def _smooth_tritones(notes: list[_Note], scale: Scale, chords: tuple[int, ...]) 
         accented = note.start % 2 == 0 or note.duration >= 1
         for degree in (note.degree - 1, note.degree + 1, note.degree - 2, note.degree + 2):
             clean = semitones(degree, before) != 6 and (after is None or semitones(degree, after) != 6)
-            if clean and LOW <= degree <= HIGH and (not accented or (is_chord_tone(degree, chord) and not _clashes(scale, degree))):
+            if clean and LOW <= degree <= high and (not accented or (is_chord_tone(degree, chord) and not _clashes(scale, degree))):
                 notes[fix] = replace(note, degree=degree)
                 break
 
 
 COUNTERS = ("thirds", "line")
 _COUNTER_LOW, _COUNTER_HIGH = -5, 4  # the counter voice sits under the lead, around the lead's tonic
-
-
-def _chord_at(chords: tuple[int, ...], start: float) -> int:
-    return chords[min(int(start // BEATS_PER_BAR), len(chords) - 1)]
 
 
 def _under(scale: Scale, degree: int, chord: int, lead: int | None) -> bool:
@@ -282,6 +298,7 @@ def _line(notes: list[_Note], scale: Scale, chords: tuple[int, ...]) -> list[_No
 def melody_phrase(
     rng: random.Random, scale: Scale, tonic: int, chords: tuple[int, ...], motifs: tuple[Motif, ...],
     anchor: int, resolve: bool, boost: int = 0, shifts: tuple[int, ...] = (), counter: str | None = None,
+    ceiling: int | None = None,
 ) -> list[NoteEvent]:
     """Motif bars sequenced from the first bar's opening note, then a cadence bar.
 
@@ -289,8 +306,12 @@ def melody_phrase(
     opening note, so a phrase can climb or sink instead of restating itself.
     With ``resolve`` the cadence lands on the tonic. ``counter`` (one of
     ``COUNTERS``) adds a second voice under the lead, on the "counter" track.
-    Times are beats from the phrase start.
+    ``ceiling`` is the highest MIDI note the lead may reach. Times are beats
+    from the phrase start.
     """
+    high = HIGH
+    while ceiling is not None and high > 7 and scale.pitch(high, tonic) > ceiling:
+        high -= 1  # never under the octave, so a phrase can still resolve up to the tonic
     notes: list[_Note] = []
     for i, motif in enumerate(motifs):
         shift = shifts[i] if i < len(shifts) else 0
@@ -299,8 +320,9 @@ def melody_phrase(
             anchor = bar[0].degree
         notes += bar
     notes += cadence(rng, chords[len(motifs)], notes[-1].degree, len(motifs) * BEATS_PER_BAR, resolve)
-    _clear_the_drone(notes, scale, chords)
-    _smooth_tritones(notes, scale, chords)
+    _keep_under(notes, chords, high)
+    _clear_the_drone(notes, scale, chords, high)
+    _smooth_tritones(notes, scale, chords, high)
 
     events = []
     for note in notes:
