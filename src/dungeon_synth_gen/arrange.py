@@ -80,6 +80,16 @@ def seeded_style(seed: int) -> str:
     return draw_style(stream(seed, "style"))
 
 
+def check_flavour(style: str, flavour: str | None) -> None:
+    """Reject a flavour that doesn't exist, or belongs to another style."""
+    if flavour is None:
+        return
+    if flavour not in parts.FLAVOUR_STYLE:
+        raise ValueError(f"unknown flavour: {flavour!r}")
+    if parts.FLAVOUR_STYLE[flavour] != style:
+        raise ValueError(f"{flavour} is a {parts.FLAVOUR_STYLE[flavour]} flavour, not {style}")
+
+
 def draw_mode(rng: random.Random, style: str) -> str:
     weights = _MODE_WEIGHTS[style]
     return rng.choices(list(weights), weights=list(weights.values()))[0]
@@ -153,8 +163,13 @@ class Palette:
         return self.theme[:bar] + (rng.choice(options),) + self.theme[bar + 1 :]
 
 
-def new_palette(rng: random.Random, scale: Scale, style: str, previous: Palette | None = None) -> Palette:
-    """Fresh material in ``scale``. Given ``previous``, the theme sometimes evolves from its theme."""
+def new_palette(
+    rng: random.Random, scale: Scale, style: str, previous: Palette | None = None, flavour: str | None = None
+) -> Palette:
+    """Fresh material in ``scale``. Given ``previous``, the theme sometimes evolves from its theme.
+
+    ``flavour`` pins the groove's flavour (its synths and pattern pools); otherwise it is drawn.
+    """
     theme = theory.theme_progression(rng, scale)
     contrast = theory.contrast_progression(rng, scale)
     cadence = rng.choice(theory.CADENCE_CHORDS[scale.mode])
@@ -172,7 +187,8 @@ def new_palette(rng: random.Random, scale: Scale, style: str, previous: Palette 
     contrast_anchor = rng.choice((4, 5))
     answer = melody.random_motif(rng, avoid_rhythm=motif.rhythm, rhythms=rhythms)
     same_sound = previous is not None and previous.groove.style == style and rng.random() < _KEEP_FLAVOUR
-    groove = parts.draw_groove(rng, style, previous.groove.sound if same_sound else None)  # last, so the style never shifts the melody's draws
+    keep = flavour or (previous.groove.sound if same_sound else None)
+    groove = parts.draw_groove(rng, style, keep)  # last, so the style never shifts the melody's draws
     return Palette(
         scale, theme, contrast, cadence, motif, contrast_motif, answer, theme_anchor, contrast_anchor, groove,
         _LEAD_FLOOR[style],
@@ -305,11 +321,12 @@ def playable(pal: Palette, chords: tuple[int, ...]) -> tuple[int, ...]:
 
 def compose(
     seed: int, *, style: str = "normal", mode: str | None = None, root: int | None = None, tempo: float | None = None,
-    intensity: float = 0.5,
+    intensity: float = 0.5, flavour: str | None = None,
 ) -> Composition:
     scale, drawn = initial_params(seed, style, mode, root, tempo)
+    check_flavour(style, flavour)
     palette_rng = stream(seed, "palette")
-    pal = new_palette(palette_rng, scale, style)
+    pal = new_palette(palette_rng, scale, style, flavour=flavour)
     rngs = PartRngs.for_seed(seed)
     names = ("intro", "theme", "contrast", "return")
     sections = [Section(name, 4 * i, pal.chords(name, palette_rng)) for i, name in enumerate(names)]

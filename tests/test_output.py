@@ -44,3 +44,11 @@ def test_cli_combat_style(tmp_path):
     assert main(["--seed", "4", "--style", "combat", "-o", str(out), "--dry"]) == 0
     with wave.open(str(out)) as f:
         assert f.getnframes() / SAMPLE_RATE > 20
+
+
+def test_cli_flavour_picks_its_style_and_names_the_file(tmp_path):
+    out = tmp_path / "doom.wav"
+    assert main(["--seed", "1", "--flavour", "doom", "-o", str(out), "--dry"]) == 0
+    assert out.exists()
+    with pytest.raises(SystemExit):
+        main(["--seed", "1", "--flavour", "doom", "--style", "normal"])

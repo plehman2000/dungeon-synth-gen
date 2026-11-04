@@ -10,6 +10,7 @@ uv run dungeon-synth-gen --seed 42 --midi      # one 16-bar piece -> out/dungeon
 uv run dungeon-synth-gen --mode phrygian --root D --tempo 64
 uv run dungeon-synth-gen --seed 42 --style combat  # -> out/dungeon_42_combat.wav
 uv run dungeon-synth-gen --seed 42 --style combat --intensity 1  # the same fight, when it matters
+uv run dungeon-synth-gen --flavour doom --minutes 2   # one flavour for the whole stream; implies its style
 uv run dungeon-synth-gen --minutes 2 --switch-at 20,45  # combat on at 0:20, off at 0:45
 uv run pytest
 ```
@@ -22,7 +23,7 @@ uv run pytest
 - Each region draws a new palette. Its theme usually evolves from the previous region's theme through the variation engine.
 - Keys move only to neighbours that contain the old tonic. The drone of one region crossfades into the next at constant level.
 - With no `--style`, each region picks normal or ambient; combat is never chosen at random.
-- `--style`, `--mode`, `--root` and `--tempo` pin that parameter for the whole stream.
+- `--style`, `--mode`, `--root`, `--tempo` and `--flavour` pin that parameter for the whole stream. `--flavour` (any flavour in the tables below) also pins its style; the switch twin still draws its own flavour.
 - The same `--seed` always gives the same stream.
 
 ## Switching to combat mid-stream

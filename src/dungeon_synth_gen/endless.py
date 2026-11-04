@@ -66,9 +66,11 @@ def _clone(rngs: arrange.PartRngs) -> arrange.PartRngs:
 
 def endless(
     seed: int, *, style: str | None = None, mode: str | None = None, root: int | None = None, tempo: float | None = None,
-    twins: bool = False, intensity: float | Callable[[], float] = 0.5,
+    twins: bool = False, intensity: float | Callable[[], float] = 0.5, flavour: str | None = None,
 ) -> Iterator[Phrase]:
-    """Phrases forever. Any of ``style``, ``mode``, ``root``, ``tempo`` pins that parameter for the whole stream.
+    """Phrases forever. Any of ``style``, ``mode``, ``root``, ``tempo``, ``flavour`` pins that parameter for the whole stream.
+
+    A pinned ``flavour`` also pins its style; the twin, in the other gear, still draws its own.
 
     The stream opens in the same style, key and tempo as ``compose(seed)`` with that seed's style.
 
@@ -78,6 +80,9 @@ def endless(
     crashes, power-chord pads and a lead doubled an octave down.
     """
     read = intensity if callable(intensity) else (lambda: intensity)
+    if flavour is not None:
+        style = style or parts.FLAVOUR_STYLE.get(flavour)
+        arrange.check_flavour(style, flavour)
     current_style = style or arrange.seeded_style(seed)
     scale, bpm = arrange.initial_params(seed, current_style, mode, root, tempo)
     base = bpm / arrange.TEMPO_SCALE[current_style]  # the calm tempo every groove multiplies
@@ -85,7 +90,7 @@ def endless(
     palette_rng = arrange.stream(seed, "palette")
     twin_rng = arrange.stream(seed, "twin")
     rngs = arrange.PartRngs.for_seed(seed)
-    pal = arrange.new_palette(palette_rng, scale, current_style)
+    pal = arrange.new_palette(palette_rng, scale, current_style, flavour=flavour)
     index = bar = 0
 
     for region in itertools.count():
@@ -140,4 +145,4 @@ def endless(
         if tempo is None:
             low, high = arrange.TEMPO_RANGE
             base = min(high, max(low, base + form.choice(_TEMPO_STEPS)))
-        pal = arrange.new_palette(palette_rng, next_scale, current_style, previous=pal)
+        pal = arrange.new_palette(palette_rng, next_scale, current_style, previous=pal, flavour=flavour)

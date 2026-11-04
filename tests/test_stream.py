@@ -393,3 +393,24 @@ def test_counter_voice_sits_in_the_chord_under_the_lead_and_clear_of_the_drone()
                 assert e.pitch % 12 in tones, (seed, p.index, e)
                 assert all((e.pitch - q) % 12 not in (1, 6, 11) for q in drone), (seed, p.index, e)
     assert heard >= 20  # it comes and goes: in some phrases, not all
+
+
+@pytest.mark.parametrize("flavour", ["doom", "brut", "organ", "mist"])
+def test_flavour_pins_every_region_and_implies_its_style(flavour):
+    from dungeon_synth_gen.parts import FLAVOUR_STYLE
+
+    for seed in range(3):
+        phrases = take(seed, 40, flavour=flavour, twins=True)
+        assert len({p.region for p in phrases}) >= 3
+        assert all(p.sound == flavour and p.style == FLAVOUR_STYLE[flavour] for p in phrases)
+        assert all(p.twin.style != p.style for p in phrases)  # the switch still has somewhere to go
+    assert compose(5, style=FLAVOUR_STYLE[flavour], flavour=flavour).sound == flavour
+
+
+def test_flavour_from_another_style_is_rejected():
+    with pytest.raises(ValueError):
+        compose(1, style="normal", flavour="doom")
+    with pytest.raises(ValueError):
+        next(endless(1, style="ambient", flavour="brut"))
+    with pytest.raises(ValueError):
+        next(endless(1, flavour="polka"))

@@ -287,6 +287,7 @@ STYLE_FLAVOURS: dict[str, dict[str, float]] = {
     "combat": {"brut": 4, "darksynth": 2, "industrial": 2, "doom": 1.5, "chiptrash": 1},
 }
 FLAVOUR_WEIGHTS = STYLE_FLAVOURS["combat"]
+FLAVOUR_STYLE = {name: style for style, weights in STYLE_FLAVOURS.items() for name in weights}  # the style each flavour belongs to
 
 
 @dataclass(frozen=True)
